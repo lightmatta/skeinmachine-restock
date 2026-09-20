@@ -551,6 +551,8 @@
       this.persistHidden = opts.persistHidden || null;
       this.rowActions = Array.isArray(opts.rowActions) ? opts.rowActions : [];
       this.groupKey = opts.groupKey || null;
+      this.vendorFilter = Array.isArray(opts.vendorFilter) ? opts.vendorFilter : null;
+      this.vendorFilterValue = "";
       this.rows = [];
       this.selected = new Set();
       this.expanded = new Set();
@@ -603,9 +605,24 @@
             })
             .join("")}</div>`
         : "";
+      const vendorHtml = this.vendorFilter
+        ? `<label class="field grid-vendor-filter" style="margin:0;min-width:200px"><span>Select by vendor name</span>
+            <select class="grid-vendor-select" aria-label="Select by vendor name">
+              <option value="">All vendors</option>
+              ${this.vendorFilter
+                .filter((o) => String(o && typeof o === "object" ? o.value : o) !== "0")
+                .map((o) => {
+                  const value = o && typeof o === "object" ? String(o.value) : String(o);
+                  const label = o && typeof o === "object" ? String(o.label ?? o.value) : String(o);
+                  return `<option value="${hd.escape(value)}">${hd.escape(label)}</option>`;
+                })
+                .join("")}
+            </select></label>`
+        : "";
       this.mount.innerHTML =
         `<div class="toolbar">
            <input type="search" placeholder="Search…" class="grid-search">
+           ${vendorHtml}
            ${bulkHtml}
            ${bulkNumHtml}
            <div class="spacer"></div>
@@ -621,6 +638,14 @@
         this.search = e.target.value.toLowerCase();
         this.paint();
       });
+      const vendorSel = this.mount.querySelector(".grid-vendor-select");
+      if (vendorSel) {
+        vendorSel.value = this.vendorFilterValue;
+        vendorSel.addEventListener("change", () => {
+          this.vendorFilterValue = vendorSel.value;
+          this.paint();
+        });
+      }
       if (this.mount.querySelector(".grid-search") && this.entity === "vendor_products") {
         this.mount.querySelector(".grid-search").placeholder = "Filter product names…";
       }
@@ -683,6 +708,9 @@
           this.columns.some((c) => String(r[c.key] ?? "").toLowerCase().includes(this.search))
         );
       }
+      if (this.vendorFilterValue) {
+        rows = rows.filter((r) => String(r.vendor_id ?? "") === String(this.vendorFilterValue));
+      }
       if (this.sortKey) {
         rows.sort((a, b) => {
           const va = a[this.sortKey],
@@ -731,19 +759,26 @@
         });
       });
       const allCb = thead.querySelector(".grid-check-all");
+      const rows = this.filteredRows();
       if (allCb) {
-        allCb.addEventListener("click", (e) => e.stopPropagation());
-        allCb.addEventListener("change", () => {
-          const rows = this.filteredRows();
-          if (allCb.checked) rows.forEach((r) => this.selected.add(r.id));
-          else rows.forEach((r) => this.selected.delete(r.id));
+        const allOn = rows.length > 0 && rows.every((r) => this.selected.has(r.id));
+        const someOn = rows.some((r) => this.selected.has(r.id));
+        allCb.checked = allOn;
+        allCb.indeterminate = someOn && !allOn;
+        allCb.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const visible = this.filteredRows();
+          const currentlyAll = visible.length > 0 && visible.every((r) => this.selected.has(r.id));
+          visible.forEach((r) => {
+            if (currentlyAll) this.selected.delete(r.id);
+            else this.selected.add(r.id);
+          });
           this.paint();
         });
       }
 
       this.syncBulkBar();
 
-      const rows = this.filteredRows();
       if (!rows.length) {
         tbody.innerHTML = `<tr><td colspan="${cols.length + extra}" class="empty">No records.</td></tr>`;
         return;
@@ -870,7 +905,6 @@
         return;
       }
       hd.toast("Updated " + (data.updated || ids.length) + " products");
-      this.selected.clear();
       this.reload();
     }
 

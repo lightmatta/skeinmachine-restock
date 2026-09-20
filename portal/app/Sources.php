@@ -68,7 +68,41 @@ class Sources
         $sets[] = "updated_at = datetime('now')";
         $vals[] = $id;
         Database::pdo()->prepare('UPDATE sources SET ' . implode(', ', $sets) . ' WHERE id = ?')->execute($vals);
+        if (in_array('collection_id', array_keys($changes), true)) {
+            self::fillNameIfEmpty($id);
+        }
         self::rescheduleAll();
+    }
+
+    /**
+     * If Source Name is empty, copy the Shopify collection title when we can.
+     * A name the user already typed is left alone.
+     */
+    public static function fillNameIfEmpty(int $id): void
+    {
+        $source = self::find($id);
+        if (!$source) {
+            return;
+        }
+        if (trim((string)($source['collection_name'] ?? '')) !== '') {
+            return;
+        }
+        $collectionId = trim((string)($source['collection_id'] ?? ''));
+        if ($collectionId === '' || !ShopifyService::configured()) {
+            return;
+        }
+        try {
+            $title = trim(ShopifyService::fetchCollectionTitle($collectionId));
+        } catch (\Throwable $e) {
+            return;
+        }
+        if ($title === '') {
+            return;
+        }
+        Database::pdo()->prepare(
+            "UPDATE sources SET collection_name = ?, updated_at = datetime('now')
+             WHERE id = ? AND TRIM(COALESCE(collection_name, '')) = ''"
+        )->execute([$title, $id]);
     }
 
     public static function delete(int $id): void
@@ -219,14 +253,9 @@ class Sources
             ];
         }
         try {
-            $title = ShopifyService::fetchCollectionTitle($collectionId);
-            if ($title !== '') {
-                Database::pdo()->prepare(
-                    "UPDATE sources SET collection_name = ?, updated_at = datetime('now') WHERE id = ?"
-                )->execute([$title, $id]);
-                $source['collection_name'] = $title;
-            }
             $items = ShopifyService::fetchCollectionProducts($collectionId);
+            self::fillNameIfEmpty($id);
+            $source = self::find($id) ?: $source;
         } catch (\Throwable $e) {
             return ['ok' => false, 'error' => $e->getMessage(), 'message' => $e->getMessage()];
         }

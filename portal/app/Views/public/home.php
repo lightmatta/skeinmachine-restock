@@ -70,11 +70,12 @@ $company = Settings::get('company_name', '');
           <table class="grid">
             <thead>
               <tr>
-                <th>SKU</th>
-                <th>ProductID</th>
-                <th>Product Name</th>
-                <th title="Current Inventory Stock Level">Inv</th>
-                <th>Order Quantity</th>
+                <th class="col-sku">SKU</th>
+                <th class="col-pid">ProductID</th>
+                <th class="col-name">Product Name</th>
+                <th class="col-num" title="Current Inventory Stock Level">Inv</th>
+                <th class="col-num">Order Quantity</th>
+                <th class="col-num" title="Inv + Order Quantity">Total</th>
               </tr>
             </thead>
             <tbody>
@@ -88,11 +89,14 @@ $company = Settings::get('company_name', '');
                   data-need="<?= (int)$line['need_qty'] ?>"
                   data-goal="<?= (int)$line['goal_qty'] ?>"
                   data-stock="<?= (int)$line['stock'] ?>">
-                <td><?= e((string)$line['sku'] !== '' ? (string)$line['sku'] : '—') ?></td>
-                <td><?= e((string)$line['product_id']) ?></td>
-                <td><?= e((string)$line['title']) ?></td>
-                <td class="need-qty" title="Current Inventory Stock Level"><?= (int)$line['stock'] ?></td>
-                <td class="need-qty"><?= (int)$line['need_qty'] ?></td>
+                <td class="col-sku"><?= e((string)$line['sku'] !== '' ? (string)$line['sku'] : '—') ?></td>
+                <td class="col-pid"><?= e((string)$line['product_id']) ?></td>
+                <td class="col-name" title="<?= e((string)$line['title']) ?>" data-full="<?= e((string)$line['title']) ?>" tabindex="0">
+                  <span class="name-clip"><?= e((string)$line['title']) ?></span>
+                </td>
+                <td class="col-num need-qty" title="Current Inventory Stock Level"><?= (int)$line['stock'] ?></td>
+                <td class="col-num need-qty"><?= (int)$line['need_qty'] ?></td>
+                <td class="col-num need-qty"><?= (int)$line['stock'] + (int)$line['need_qty'] ?></td>
               </tr>
               <?php endforeach; ?>
             </tbody>
@@ -186,11 +190,34 @@ page_script(<<<'JS'
       out.push('   Product ID: ' + it.pid);
       out.push('   Current inventory: ' + it.stock);
       out.push('   Order quantity: ' + it.need + '  (goal ' + it.goal + ' − current ' + it.stock + ')');
+      out.push('   Total: ' + (it.stock + it.need));
       out.push('');
     });
     out.push('Thank you.');
     return out.join('\n') + '\n';
   }
+
+  function closeNames(except){
+    document.querySelectorAll('.col-name.is-open').forEach(function(td){
+      if (td !== except) td.classList.remove('is-open');
+    });
+  }
+
+  document.querySelectorAll('.col-name').forEach(function(td){
+    td.addEventListener('click', function(e){
+      e.stopPropagation();
+      var open = td.classList.contains('is-open');
+      closeNames();
+      if (!open) td.classList.add('is-open');
+    });
+    td.addEventListener('keydown', function(e){
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        td.click();
+      }
+    });
+  });
+  document.addEventListener('click', function(){ closeNames(); });
 
   if (vendorInp) vendorInp.addEventListener('input', apply);
   if (kwInp) kwInp.addEventListener('input', apply);

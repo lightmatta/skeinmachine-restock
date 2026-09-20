@@ -4,7 +4,8 @@ declare(strict_types=1);
 namespace App;
 
 /**
- * Minimal PDF 1.4 writer for single-page (or multi-page) A4 reports.
+ * Minimal PDF 1.4 writer for Restock Request Forms.
+ * All body text is black; tables use black outlines.
  */
 class Pdf
 {
@@ -15,9 +16,8 @@ class Pdf
     {
         $pageW = 595.28;
         $pageH = 841.89;
-        $margin = 48;
+        $margin = 42;
         $pages = [];
-        $y = $pageH - $margin;
         $ops = '';
 
         $flush = static function () use (&$pages, &$ops): void {
@@ -32,10 +32,10 @@ class Pdf
         $text = static function (float $x, float $y, string $str, int $size, bool $bold = false) use ($add): void {
             $font = $bold ? 'F2' : 'F1';
             $safe = self::escape($str);
-            $add(sprintf("BT /%s %d Tf 1 0 0 1 %.2f %.2f Tm (%s) Tj ET\n", $font, $size, $x, $y, $safe));
+            $add(sprintf("0 0 0 rg BT /%s %d Tf 1 0 0 1 %.2f %.2f Tm (%s) Tj ET\n", $font, $size, $x, $y, $safe));
         };
 
-        $rule = static function (float $x, float $y, float $w, float $h, string $rgb = '0.12 0.12 0.12') use ($add): void {
+        $fill = static function (float $x, float $y, float $w, float $h, string $rgb) use ($add): void {
             $add(sprintf("%s rg %.2f %.2f %.2f %.2f re f\n", $rgb, $x, $y, $w, $h));
         };
 
@@ -46,9 +46,10 @@ class Pdf
         $rows = $doc['rows'] ?? [];
         $footer = (string)($doc['footer'] ?? '');
 
-        $rule($margin, $pageH - 36, $pageW - 2 * $margin, 10, '0.18 0.18 0.18');
-        $text($margin, $y - 6, $title, 18, true);
-        $y -= 28;
+        $usable = $pageW - 2 * $margin;
+        $fill($margin, $pageH - 34, $usable, 8, '0 0 0');
+        $text($margin, $pageH - $margin - 8, $title, 18, true);
+        $y = $pageH - $margin - 30;
         if ($subtitle !== '') {
             $text($margin, $y, $subtitle, 12, true);
             $y -= 18;
@@ -57,36 +58,66 @@ class Pdf
             $text($margin, $y, (string)$line, 10, false);
             $y -= 14;
         }
-        $y -= 8;
-        $rule($margin, $y + 8, $pageW - 2 * $margin, 0.8, '0.75 0.75 0.75');
+        $y -= 10;
 
-        $colX = [$margin, $margin + 90, $margin + 190, $margin + 360, $margin + 430];
-        $usable = $pageW - 2 * $margin;
-        if (count($headers) === 5) {
-            $colX = [$margin, $margin + 86, $margin + 186, $margin + 348, $margin + 428];
+        $n = max(1, count($headers));
+        if ($n === 6) {
+            $widths = [78, 78, $usable - 78 - 78 - 44 - 62 - 44, 44, 62, 44];
+        } elseif ($n === 5) {
+            $widths = [86, 86, $usable - 86 - 86 - 48 - 70, 48, 70];
+        } else {
+            $even = $usable / $n;
+            $widths = array_fill(0, $n, $even);
         }
-        $rowH = 16;
-        $headerY = $y;
-        $rule($margin, $headerY - 4, $usable, 18, '0.95 0.95 0.95');
-        foreach ($headers as $i => $h) {
-            $text($colX[$i] ?? $margin, $headerY, (string)$h, 9, true);
+        $colX = [];
+        $x = $margin;
+        foreach ($widths as $w) {
+            $colX[] = $x;
+            $x += $w;
         }
-        $y = $headerY - 22;
+        $clips = $n === 6 ? [12, 12, 28, 6, 8, 6] : array_fill(0, $n, 22);
+        $rowH = 18;
+        $headerH = 20;
+
+        $drawHeader = static function (float $headerY) use ($add, $text, $fill, $margin, $usable, $headers, $colX, $headerH): void {
+            $bottom = $headerY - 5;
+            $fill($margin, $bottom, $usable, $headerH, '0.93 0.93 0.93');
+            $add("0 0 0 RG 0.8 w\n");
+            $add(sprintf("%.2f %.2f %.2f %.2f re S\n", $margin, $bottom, $usable, $headerH));
+            foreach ($headers as $i => $h) {
+                $text(($colX[$i] ?? $margin) + 4, $headerY, (string)$h, 8, true);
+                if ($i > 0) {
+                    $add(sprintf("%.2f %.2f m %.2f %.2f l S\n", $colX[$i], $bottom, $colX[$i], $bottom + $headerH));
+                }
+            }
+        };
+
+        $drawHeader($y);
+        $y -= $headerH + 2;
 
         foreach ($rows as $row) {
-            if ($y < $margin + 40) {
+            if ($y < $margin + 48) {
                 $flush();
                 $y = $pageH - $margin;
+                $drawHeader($y);
+                $y -= $headerH + 2;
             }
+            $bottom = $y - 5;
+            $add("0 0 0 RG 0.6 w\n");
+            $add(sprintf("%.2f %.2f %.2f %.2f re S\n", $margin, $bottom, $usable, $rowH));
             foreach ($row as $i => $cell) {
-                $text($colX[$i] ?? $margin, $y, self::clip((string)$cell, 42), 9, false);
+                $max = $clips[$i] ?? 20;
+                $text(($colX[$i] ?? $margin) + 4, $y, self::clip((string)$cell, $max), 8, false);
+                if ($i > 0) {
+                    $add(sprintf("%.2f %.2f m %.2f %.2f l S\n", $colX[$i], $bottom, $colX[$i], $bottom + $rowH));
+                }
             }
             $y -= $rowH;
         }
 
-        $y -= 10;
+        $y -= 14;
         if ($footer !== '') {
-            $text($margin, max($margin, $y), $footer, 10, false);
+            $text($margin, max($margin, $y), $footer, 9, false);
         }
         $flush();
 
@@ -98,7 +129,7 @@ class Pdf
         if (strlen($s) <= $max) {
             return $s;
         }
-        return substr($s, 0, $max - 1) . '…';
+        return substr($s, 0, max(1, $max - 3)) . '...';
     }
 
     private static function escape(string $s): string
@@ -120,7 +151,6 @@ class Pdf
         $objects[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
         $objects[4] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>';
         $next = 5;
-        $contentIds = [];
         $pageIds = [];
         foreach ($pages as $content) {
             $stream = $content;
@@ -135,7 +165,6 @@ class Pdf
                 $font1,
                 $font2
             );
-            $contentIds[] = $cid;
             $pageIds[] = $pid;
             $kids[] = $pid . ' 0 R';
         }

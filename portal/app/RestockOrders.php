@@ -375,6 +375,7 @@ class RestockOrders
             $out[] = '   Current inventory: ' . (int)($l['stock'] ?? 0);
             $out[] = '   Order quantity: ' . (int)($l['need_qty'] ?? 0)
                 . '  (goal ' . (int)($l['goal_qty'] ?? 0) . ' − current ' . (int)($l['stock'] ?? 0) . ')';
+            $out[] = '   Total: ' . ((int)($l['stock'] ?? 0) + (int)($l['need_qty'] ?? 0));
             $out[] = '';
             $i++;
         }
@@ -395,12 +396,15 @@ class RestockOrders
         $label = trim((string)($group['label'] ?? $group['vendor_name'] ?? 'Vendor'));
         $rows = [];
         foreach ($lines as $l) {
+            $inv = (int)($l['stock'] ?? 0);
+            $need = (int)($l['need_qty'] ?? 0);
             $rows[] = [
                 (string)(($l['sku'] ?? '') !== '' ? $l['sku'] : '—'),
                 (string)($l['product_id'] ?? ''),
                 (string)($l['title'] ?? ''),
-                (string)(int)($l['stock'] ?? 0),
-                (string)(int)($l['need_qty'] ?? 0),
+                (string)$inv,
+                (string)$need,
+                (string)($inv + $need),
             ];
         }
         return Pdf::build([
@@ -411,7 +415,7 @@ class RestockOrders
                 'Date: ' . date('j F Y'),
                 count($lines) . ' item' . (count($lines) === 1 ? '' : 's') . ' below goal',
             ],
-            'headers' => ['SKU', 'Product ID', 'Product Name', 'Inv', 'Order Qty'],
+            'headers' => ['SKU', 'Product ID', 'Product Name', 'Inv', 'Order Qty', 'Total'],
             'rows' => $rows,
             'footer' => 'Please supply the listed quantities so on-hand stock can return to goal levels. Thank you.',
         ]);

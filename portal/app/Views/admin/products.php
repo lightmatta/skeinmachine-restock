@@ -43,6 +43,7 @@ new hd.DataGrid('productsGrid', {
   entity: 'products',
   readonly: $roJs,
   selectable: true,
+  vendorFilter: $vendorOpts,
   bulk: [
     {key:'status', label:'Set status', options:[{value:'active',label:'active'},{value:'inactive',label:'inactive'}]}
   ],

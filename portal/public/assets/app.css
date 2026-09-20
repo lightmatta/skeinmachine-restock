@@ -690,3 +690,52 @@ tr.wo-tray.wo-done td {
 .need-qty { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
 .need-qty .muted { font-weight: 400; }
 
+.restock-report .table-wrap { overflow-x: hidden; }
+.restock-report table.grid {
+  table-layout: fixed;
+  width: 100%;
+}
+.restock-report table.grid th,
+.restock-report table.grid td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.restock-report .col-sku { width: 16%; }
+.restock-report .col-pid { width: 12%; }
+.restock-report .col-name { width: auto; }
+.restock-report .col-num { width: 9%; text-align: right; }
+.restock-report td.col-name {
+  position: relative;
+  cursor: pointer;
+}
+.restock-report td.col-name .name-clip {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.restock-report td.col-name.is-open { overflow: visible; z-index: 4; }
+.restock-report td.col-name.is-open .name-clip { visibility: hidden; }
+.restock-report td.col-name.is-open::after {
+  content: attr(data-full);
+  position: absolute;
+  left: 8px;
+  top: calc(100% - 4px);
+  z-index: 5;
+  min-width: 180px;
+  max-width: min(420px, 70vw);
+  padding: 8px 10px;
+  background: #fff;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.12);
+  white-space: normal;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.grid-vendor-filter span { font-size: 12px; color: var(--grey); }
+.grid-vendor-select { min-width: 200px; }
+

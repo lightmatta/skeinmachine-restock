@@ -105,10 +105,14 @@ expect(str_contains($text, 'House Dye Wholesale / Yarn Collection'), 'Copy text 
 expect(str_contains($text, 'SKU: YRN-MERINO-01'), 'Copy text includes SKU');
 expect(str_contains($text, 'Current inventory:'), 'Copy text includes current inventory');
 expect(str_contains($text, 'Order quantity:'), 'Copy text includes order qty');
+expect(str_contains($text, 'Total:'), 'Copy text includes Total');
 $pdf = App\RestockOrders::reportPdf($adelaide);
 expect(str_starts_with($pdf, '%PDF-1.4'), 'PDF writer emits PDF 1.4');
 expect(str_contains($pdf, 'Restock Request Form'), 'PDF is labelled Restock Request Form');
 expect(str_contains($pdf, 'Adelaide Notions / Bowls, Markers'), 'PDF uses the grouped vendor / collection label');
+expect(str_contains($pdf, 'Total'), 'PDF includes a Total column');
+expect(str_contains($pdf, '0 0 0 rg'), 'PDF body text is black');
+expect(str_contains($pdf, '0 0 0 RG'), 'PDF table outlines are black');
 expect(str_contains(App\RestockOrders::reportFilename($adelaide), 'adelaide-notions'), 'PDF filename slugs the vendor group');
 
 $headerSrc = file_get_contents($root . '/app/Views/layouts/_header.php');
@@ -151,6 +155,7 @@ $prodSrc = file_get_contents($root . '/app/Views/admin/products.php');
 expect(str_contains($prodSrc, 'bulkNumber'), 'Products grid has bulk number edits');
 expect(str_contains($prodSrc, "key:'min_qty'"), 'Products bulk can set min');
 expect(str_contains($prodSrc, "key:'goal_qty'"), 'Products bulk can set goal');
+expect(str_contains($prodSrc, 'vendorFilter'), 'Products grid has select by vendor name');
 expect(str_contains($prodSrc, 'Minimum quantity to trigger a restock alert'), 'Min hover is the restock-alert description');
 expect(str_contains($prodSrc, 'Ideal restock level, budget/vendor stocks dependent'), 'Goal hover is the ideal restock description');
 
@@ -165,10 +170,18 @@ expect(str_contains($homeSrc, 'Copy as text'), 'Each report has copy as text');
 expect(str_contains($homeSrc, 'pdf-report') && str_contains($homeSrc, 'Restock Request Form PDF'), 'Each report has a PDF print icon');
 expect(str_contains($homeSrc, 'Order Quantity'), 'Reports column is Order Quantity');
 expect(str_contains($homeSrc, 'Current Inventory Stock Level'), 'Inv column hover explains current inventory');
+expect(str_contains($homeSrc, '>Total<') || str_contains($homeSrc, 'Inv + Order Quantity'), 'Reports has a Total column');
+expect(str_contains($homeSrc, 'col-name'), 'Product name uses a truncating column');
 expect(!str_contains($homeSrc, 'Desired Goal'), 'Old goal-minus-stock column title is gone');
+
+$jsSrc = file_get_contents($root . '/public/assets/app.js');
+expect(str_contains($jsSrc, 'currentlyAll'), 'Check-all toggles all on or all off');
+expect(str_contains($jsSrc, 'vendorFilter'), 'Products grid can filter by vendor');
+expect(!str_contains($jsSrc, 'this.selected.clear();'), 'Bulk min/goal does not clear the selection');
 
 $sourcesSrc = file_get_contents($root . '/app/Views/admin/sources.php');
 expect(str_contains($sourcesSrc, 'Vendor Name'), 'Sources has Vendor Name');
+expect(str_contains($sourcesSrc, 'Source Name'), 'Sources has Source Name');
 expect(str_contains($sourcesSrc, 'Collection ID'), 'Sources has Collection ID');
 expect(str_contains($sourcesSrc, 'Sync frequency'), 'Sources has sync frequency');
 expect(str_contains($sourcesSrc, 'Last sync'), 'Sources has last sync');
@@ -183,6 +196,32 @@ $empty = App\Sources::create();
 $refused = App\Sources::syncNow($empty);
 expect(($refused['error'] ?? '') === 'no_collection', 'Sync now refuses an empty Collection ID');
 App\Sources::delete($empty);
+
+App\Settings::set('shopify_domain', 'house-dye.myshopify.com');
+App\Settings::set('shopify_client_id', 'cid-123');
+App\Settings::set('shopify_client_secret', 'csec-456');
+App\ShopifyService::forgetCachedToken();
+$calls = [];
+App\ShopifyService::$transport = static function (string $method, string $url, array $headers, ?string $body) use (&$calls): array {
+    $calls[] = $url;
+    if (str_contains($url, '/admin/oauth/access_token')) {
+        return [200, json_encode(['access_token' => 'tok', 'expires_in' => 86399])];
+    }
+    if (str_contains($url, 'collections/')) {
+        return [200, json_encode(['collection' => ['title' => 'Yarn Collection']] )];
+    }
+    return [404, '{}'];
+};
+$sid = App\Sources::create();
+App\Sources::update($sid, ['collection_id' => '1001001', 'collection_name' => '']);
+$filled = App\Sources::find($sid);
+expect(trim((string)($filled['collection_name'] ?? '')) === 'Yarn Collection', 'Empty Source Name is filled from Shopify collection title');
+App\Sources::update($sid, ['collection_name' => 'Keep this name']);
+App\Sources::fillNameIfEmpty($sid);
+$kept = App\Sources::find($sid);
+expect((string)$kept['collection_name'] === 'Keep this name', 'A user-set Source Name is not overwritten');
+App\ShopifyService::$transport = null;
+App\Sources::delete($sid);
 
 $spread = App\Sources::spreadTimes('2026-09-20', 3);
 expect($spread === ['2026-09-20 04:00:00', '2026-09-20 12:00:00', '2026-09-20 20:00:00'], 'Same-day syncs are spread evenly across 24 hours');
