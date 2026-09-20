@@ -1,0 +1,21 @@
+# HouseDye Portal — Apache config for the public web root.
+DirectoryIndex index.php
+
+# Optional pretty URLs: /p/admin/orders -> index.php?r=admin/orders
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+  RewriteRule ^p/(.*)$ index.php?r=$1 [QSA,L]
+</IfModule>
+
+# Never serve dotfiles.
+<FilesMatch "^\.">
+  Require all denied
+</FilesMatch>
+
+# Basic hardening headers.
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+  Header set X-Frame-Options "SAMEORIGIN"
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>

@@ -1,0 +1,9 @@
+# Runtime data + local config (see portal/.gitignore for details)
+portal/data/*.sqlite
+portal/data/*.sqlite-wal
+portal/data/*.sqlite-shm
+portal/config/config.php
+
+# OS / editor noise
+.DS_Store
+*.log

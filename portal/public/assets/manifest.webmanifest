@@ -1,0 +1,13 @@
+{
+  "name": "HouseDye Wholesale Portal",
+  "short_name": "HouseDye",
+  "description": "Wholesale ordering, order tracking and support chat for HouseDye stockists.",
+  "start_url": "../index.php?r=dashboard",
+  "scope": "../",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#FF6F61",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

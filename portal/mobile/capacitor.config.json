@@ -1,0 +1,14 @@
+{
+  "appId": "com.housedye.portal",
+  "appName": "HouseDye",
+  "webDir": "www",
+  "server": {
+    "url": "https://YOUR-PORTAL-DOMAIN.example",
+    "cleartext": false
+  },
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
+  }
+}
