@@ -4,8 +4,8 @@ CREATE TABLE IF NOT EXISTS users (
     id                   INTEGER PRIMARY KEY AUTOINCREMENT,
     email                TEXT NOT NULL UNIQUE,
     password_hash        TEXT,
-    role                 TEXT NOT NULL DEFAULT 'guest',      -- guest | wholesale | staff | admin
-    status               TEXT NOT NULL DEFAULT 'pending',    -- pending | active | disabled
+    role                 TEXT NOT NULL DEFAULT 'staff',      -- staff | admin
+    status               TEXT NOT NULL DEFAULT 'active',     -- active | disabled
     first_name           TEXT,
     last_name            TEXT,
     fin_first_name       TEXT,
@@ -15,9 +15,6 @@ CREATE TABLE IF NOT EXISTS users (
     delivery_address     TEXT,
     company_website      TEXT,
     application_message  TEXT,
-    ignore_min_quantities INTEGER NOT NULL DEFAULT 0,
-    tray_rate            INTEGER NOT NULL DEFAULT 10,   -- max trays this staff member can complete per day
-    discount_percent     INTEGER NOT NULL DEFAULT 0,    -- 0 = use global wholesale_percent; else % of retail
     preferred_currency   TEXT NOT NULL DEFAULT '',
     created_at           TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at           TEXT NOT NULL DEFAULT (datetime('now')),

@@ -7,13 +7,9 @@ namespace App;
  * Authentication + authorization.
  *
  * The singular overarching SUPERUSER is authenticated exclusively from
- * config.php. A sentinel users row (id 0) exists only so storefront orders
- * can satisfy the users foreign key. In-database "admin" users
- * hold full system-administration privileges (Orders, Users, Products,
- * Bundles, Messages, Analytics, Settings) but can never read or modify the
- * superuser configuration file. Staff users see a limited portal (dashboard,
- * work orders, read-only products/bundles, and their own account). Standard
- * storefront users are "guest" or "wholesale".
+ * config.php. A sentinel users row (id 0) exists for legacy foreign keys.
+ * In-database "admin" users hold full system-administration privileges.
+ * Staff users see the restock portal plus a limited admin shell.
  */
 class Auth
 {
@@ -55,7 +51,7 @@ class Auth
             return false;
         }
 
-        // 2) Database users (admin / staff / wholesale / guest).
+        // 2) Database users (admin / staff).
         $stmt = Database::pdo()->prepare('SELECT * FROM users WHERE email = ? LIMIT 1');
         $stmt->execute([strtolower($identifier)]);
         $user = $stmt->fetch();
@@ -88,7 +84,12 @@ class Auth
 
     public static function user(): ?array
     {
-        return $_SESSION['user'] ?? null;
+        $u = $_SESSION['user'] ?? null;
+        if ($u && in_array((string)($u['role'] ?? ''), ['wholesale', 'guest'], true)) {
+            $u['role'] = 'staff';
+            $_SESSION['user'] = $u;
+        }
+        return $u;
     }
 
     /** Full DB row for the current user (null for superuser / guests). */
@@ -132,34 +133,23 @@ class Auth
 
     public static function isWholesale(): bool
     {
-        return (self::user()['role'] ?? '') === 'wholesale';
+        return false;
     }
 
-    /** Wholesale clients, database admins, and the Super Admin may shop. */
     public static function canOrder(): bool
     {
-        if (self::isWholesale()) {
-            return true;
-        }
-        return self::isAdmin();
+        return false;
     }
 
-    /** Require a shopper (wholesale client, admin, or Super Admin) or abort. */
+    /** @deprecated Shopping cart has been removed. */
     public static function requireShopper(): void
     {
-        self::requireLogin();
-        if (self::isAdmin()) {
-            self::ensureShopperUser();
-            return;
-        }
-        if (!self::isWholesale()) {
-            abort(403, 'Wholesale access required.');
-        }
+        abort(404, 'Page not found.');
     }
 
     /**
-     * users.id used for cart/checkout. The Super Admin session is id 0; a
-     * sentinel users row is created so orders can reference it.
+     * users.id used for legacy order foreign keys. The Super Admin session is
+     * id 0; a sentinel users row is created so leftover rows can reference it.
      */
     public static function shopperId(): int
     {
@@ -180,8 +170,8 @@ class Auth
         }
         $email = '__superadmin__@housedye.internal';
         $pdo->prepare(
-            "INSERT INTO users (id, email, password_hash, role, status, first_name, last_name, ignore_min_quantities)
-             VALUES (0, ?, '', 'admin', 'active', 'Super', 'Admin', 1)"
+            "INSERT INTO users (id, email, password_hash, role, status, first_name, last_name)
+             VALUES (0, ?, '', 'admin', 'active', 'Super', 'Admin')"
         )->execute([$email]);
         return 0;
     }
@@ -205,15 +195,6 @@ class Auth
         self::requireLogin();
         if (!self::isAdmin()) {
             abort(403, 'Administrator access required.');
-        }
-    }
-
-    /** Require an active wholesale client or abort. */
-    public static function requireWholesale(): void
-    {
-        self::requireLogin();
-        if (!self::isWholesale()) {
-            abort(403, 'Wholesale access required.');
         }
     }
 

@@ -76,7 +76,69 @@ foreach ($hd['fulfillable'] as $line) {
 }
 expect($coralLine !== null && (int)$coralLine['recommend_qty'] === 32, 'Recommend qty is goal minus stock (36-4)');
 
+$reports = App\RestockOrders::goalReports();
+expect($reports !== [], 'Goal restock reports are produced');
+$repByName = [];
+foreach ($reports as $g) {
+    $repByName[$g['vendor_name']] = $g;
+}
+expect(isset($repByName['House Dye Wholesale']), 'House Dye Wholesale has a goal report');
+$hdRepSkus = array_column($repByName['House Dye Wholesale']['lines'] ?? [], 'sku');
+expect(in_array('YRN-MERINO-02', $hdRepSkus, true), 'Deep Ocean is below goal and appears on the portal report');
+expect(in_array('YRN-MERINO-01', $hdRepSkus, true), 'Coral Reef is below goal and appears on the portal report');
+$ocean = null;
+foreach ($repByName['House Dye Wholesale']['lines'] as $line) {
+    if ($line['sku'] === 'YRN-MERINO-02') {
+        $ocean = $line;
+    }
+}
+expect($ocean !== null && (int)$ocean['need_qty'] === 10, 'Need qty is goal minus stock (30-20)');
+expect($ocean !== null && (string)$ocean['product_id'] === (string)$ocean['catalog_id'], 'ProductID falls back to catalog id');
+$text = App\RestockOrders::reportText($repByName['House Dye Wholesale']);
+expect(str_contains($text, 'Restock request — House Dye Wholesale'), 'Copy text names the vendor');
+expect(str_contains($text, 'SKU: YRN-MERINO-01'), 'Copy text includes SKU');
+expect(str_contains($text, 'Quantity to order:'), 'Copy text includes order qty');
+
+$headerSrc = file_get_contents($root . '/app/Views/layouts/_header.php');
+expect(!str_contains($headerSrc, 'Apply for a wholesale'), 'Header has no wholesale apply button');
+expect(!str_contains($headerSrc, "url('page'"), 'Header has no About/Contact pages');
+expect(!str_contains($headerSrc, 'nav-cart'), 'Header has no shopping cart');
+
+$sidebarSrc = file_get_contents($root . '/app/Views/admin/_sidebar.php');
+expect(!str_contains($sidebarSrc, 'admin/bundles'), 'Admin sidebar has no Bundles');
+
+$usersSrc = file_get_contents($root . '/app/Views/admin/users.php');
+expect(!str_contains($usersSrc, 'Pending applications'), 'Users page has no pending applications');
+expect(!str_contains($usersSrc, 'Approve as wholesale'), 'Users page has no wholesale approval');
+expect(!str_contains($usersSrc, 'tray_rate'), 'Users grid has no tray rate');
+expect(!str_contains($usersSrc, 'ignore_min'), 'Users grid has no ignore min');
+expect(!str_contains($usersSrc, 'discount_percent'), 'Users grid has no discount');
+expect(str_contains($usersSrc, "['staff','admin']") || str_contains($usersSrc, "['staff']"), 'Users roles are staff/admin only');
+
+$prodSrc = file_get_contents($root . '/app/Views/admin/products.php');
+expect(str_contains($prodSrc, 'bulkNumber'), 'Products grid has bulk number edits');
+expect(str_contains($prodSrc, "key:'min_qty'"), 'Products bulk can set min');
+expect(str_contains($prodSrc, "key:'goal_qty'"), 'Products bulk can set goal');
+
+$loginSrc = file_get_contents($root . '/app/Views/auth/login.php');
+expect(!str_contains($loginSrc, 'Apply here'), 'Login has no wholesale apply link');
+
+$homeSrc = file_get_contents($root . '/app/Views/public/home.php');
+expect(str_contains($homeSrc, 'Vendor restock reports'), 'Home is restock reports');
+expect(!str_contains($homeSrc, 'Search catalog'), 'Home does not show the product catalog');
+expect(str_contains($homeSrc, 'Copy as text'), 'Each report has copy as text');
+
 $pdo = App\Database::pdo();
+$roles = $pdo->query("SELECT DISTINCT role FROM users WHERE id > 0")->fetchAll(PDO::FETCH_COLUMN);
+foreach ($roles as $role) {
+    expect(in_array($role, ['staff', 'admin'], true), "User role '$role' is staff or admin");
+}
+
+$userCols = array_column($pdo->query('PRAGMA table_info(users)')->fetchAll(), 'name');
+foreach (['tray_rate', 'discount_percent', 'ignore_min_quantities'] as $gone) {
+    expect(!in_array($gone, $userCols, true), "users.$gone column is removed");
+}
+
 $cols = array_column($pdo->query('PRAGMA table_info(products)')->fetchAll(), 'name');
 foreach (['spt', 'warehouse_stock', 'colours'] as $hidden) {
     expect(in_array($hidden, $cols, true), "Legacy column $hidden remains in schema");

@@ -233,6 +233,109 @@ class RestockOrders
         return $out;
     }
 
+    /**
+     * Portal restock reports: active catalog items whose on-hand stock is below Goal.
+     * Grouped by assigned vendor. ProductID is the Shopify product id when set, else catalog id.
+     *
+     * @return list<array{vendor_id:int,vendor_name:string,vendor_code:string,lines:list<array<string,mixed>>}>
+     */
+    public static function goalReports(): array
+    {
+        $pdo = Database::pdo();
+        $products = $pdo->query(
+            "SELECT p.id, p.sku, p.title, p.stock, p.goal_qty, p.vendor_id, p.shopify_product_id,
+                    v.name AS vendor_name, v.vendor_id AS vendor_code
+             FROM products p
+             LEFT JOIN vendors v ON v.id = p.vendor_id
+             WHERE p.archived = 0 AND p.status = 'active' AND p.goal_qty > p.stock
+             ORDER BY COALESCE(NULLIF(v.name, ''), 'Unassigned') COLLATE NOCASE, p.title COLLATE NOCASE"
+        )->fetchAll();
+
+        $groups = [];
+        foreach ($products as $p) {
+            $vendorId = (int)($p['vendor_id'] ?? 0);
+            $vendorName = trim((string)($p['vendor_name'] ?? ''));
+            if ($vendorName === '') {
+                $vendorName = 'Unassigned';
+            }
+            $shopifyId = trim((string)($p['shopify_product_id'] ?? ''));
+            $productId = $shopifyId !== '' ? $shopifyId : (string)(int)$p['id'];
+            $stock = (int)$p['stock'];
+            $goal = (int)$p['goal_qty'];
+            $need = max(0, $goal - $stock);
+            $key = $vendorId > 0 ? $vendorId : 0;
+            if (!isset($groups[$key])) {
+                $groups[$key] = [
+                    'vendor_id' => $vendorId,
+                    'vendor_name' => $vendorName,
+                    'vendor_code' => (string)($p['vendor_code'] ?? ''),
+                    'lines' => [],
+                ];
+            }
+            $groups[$key]['lines'][] = [
+                'sku' => (string)($p['sku'] ?? ''),
+                'product_id' => $productId,
+                'catalog_id' => (int)$p['id'],
+                'title' => (string)$p['title'],
+                'stock' => $stock,
+                'goal_qty' => $goal,
+                'need_qty' => $need,
+            ];
+        }
+        return array_values($groups);
+    }
+
+    /**
+     * Human-readable restock request suitable for pasting into a vendor email.
+     *
+     * @param array<string,mixed> $group
+     * @param list<array<string,mixed>>|null $lines
+     */
+    public static function reportText(array $group, ?array $lines = null): string
+    {
+        $lines = $lines ?? ($group['lines'] ?? []);
+        $vendor = (string)($group['vendor_name'] ?? 'Vendor');
+        $code = trim((string)($group['vendor_code'] ?? ''));
+        $totalQty = 0;
+        foreach ($lines as $l) {
+            $totalQty += (int)($l['need_qty'] ?? 0);
+        }
+        $header = 'Restock request — ' . $vendor;
+        if ($code !== '') {
+            $header .= ' (' . $code . ')';
+        }
+        $n = count($lines);
+        $out = [];
+        $out[] = $header;
+        $out[] = 'Date: ' . date('j F Y');
+        $out[] = sprintf(
+            '%d item%s · %d unit%s to order',
+            $n,
+            $n === 1 ? '' : 's',
+            $totalQty,
+            $totalQty === 1 ? '' : 's'
+        );
+        $out[] = str_repeat('=', 48);
+        $out[] = '';
+        $out[] = 'Hello,';
+        $out[] = '';
+        $out[] = 'Please supply the following so we can bring on-hand stock up to our goal levels:';
+        $out[] = '';
+        $i = 1;
+        foreach ($lines as $l) {
+            $sku = trim((string)($l['sku'] ?? ''));
+            $out[] = $i . '. ' . (string)($l['title'] ?? '');
+            $out[] = '   SKU: ' . ($sku !== '' ? $sku : '—');
+            $out[] = '   Product ID: ' . (string)($l['product_id'] ?? '');
+            $out[] = '   Quantity to order: ' . (int)($l['need_qty'] ?? 0)
+                . '  (goal ' . (int)($l['goal_qty'] ?? 0) . ' − current ' . (int)($l['stock'] ?? 0) . ')';
+            $out[] = '';
+            $i++;
+        }
+        $out[] = 'Thank you.';
+        return rtrim(implode("\n", $out)) . "\n";
+    }
+
     public static function staffRates(): array
     {
         return [];

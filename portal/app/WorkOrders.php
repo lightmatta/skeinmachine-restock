@@ -201,7 +201,7 @@ class WorkOrders
                     u.email AS client_email,
                     TRIM(COALESCE(s.first_name,'') || ' ' || COALESCE(s.last_name,'')) AS staff_name,
                     s.email AS staff_email,
-                    s.tray_rate AS staff_tray_rate,
+                    10 AS staff_tray_rate,
                     p.spt AS product_spt,
                     p.warehouse_stock AS product_ws
              FROM work_orders wo
@@ -504,10 +504,7 @@ class WorkOrders
         if (!$staffUserId) {
             return 10;
         }
-        $st = Database::pdo()->prepare('SELECT tray_rate FROM users WHERE id = ?');
-        $st->execute([$staffUserId]);
-        $n = (int)$st->fetchColumn();
-        return max(1, $n > 0 ? $n : 10);
+        return 10;
     }
 
     /**
@@ -968,8 +965,8 @@ class WorkOrders
     public static function staffRates(): array
     {
         $out = [];
-        foreach (Database::pdo()->query("SELECT id, tray_rate FROM users WHERE role = 'staff'") as $row) {
-            $out[(int)$row['id']] = max(1, (int)($row['tray_rate'] ?? 10) ?: 10);
+        foreach (Database::pdo()->query("SELECT id FROM users WHERE role = 'staff'") as $row) {
+            $out[(int)$row['id']] = 10;
         }
         return $out;
     }

@@ -38,16 +38,7 @@ class AuthController
 
     private static function sendHome(): void
     {
-        if (Auth::isAdmin()) {
-            redirect('admin');
-        }
-        if (Auth::isStaff()) {
-            redirect('admin');
-        }
-        if (Auth::isWholesale()) {
-            redirect('dashboard');
-        }
-        redirect('dashboard'); // guests get the guest dashboard
+        redirect('home');
     }
 
     /** Account settings for the logged-in user (self-service profile). */
@@ -84,7 +75,7 @@ class AuthController
                 $vals[] = trim((string)$_POST[$f]);
             }
         }
-        if (Auth::isWholesale() && array_key_exists('preferred_currency', $_POST)) {
+        if (array_key_exists('preferred_currency', $_POST) && Auth::isStaffOrAdmin()) {
             $pref = strtoupper(trim((string)$_POST['preferred_currency']));
             if ($pref === '' || isset(\App\Currency::codes()[$pref])) {
                 $sets[] = 'preferred_currency = ?';

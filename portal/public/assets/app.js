@@ -596,8 +596,9 @@
         ? `<div class="grid-bulk-number">${this.bulkNumber
             .map((b) => {
               const min = b.min != null ? Number(b.min) : 0;
-              return `<label class="grid-bulk-number-item"><span class="grid-bulk-number-label">${hd.escape(b.label)}</span>
-                <input type="number" min="${min}" class="grid-bulk-number-input" data-bulk-num="${hd.escape(b.key)}" placeholder="0">
+              const tip = hd.escape(b.tip || b.label);
+              return `<label class="grid-bulk-number-item" title="${tip}"><span class="grid-bulk-number-label">${hd.escape(b.label)}</span>
+                <input type="number" min="${min}" class="grid-bulk-number-input" data-bulk-num="${hd.escape(b.key)}" placeholder="0" title="${tip}">
                 <button type="button" class="btn btn-sm btn-primary" data-bulk-num-apply="${hd.escape(b.key)}">Apply</button></label>`;
             })
             .join("")}</div>`

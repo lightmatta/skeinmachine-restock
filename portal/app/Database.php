@@ -72,12 +72,10 @@ class Database
         self::ensureColumn('work_orders', 'ends_at', 'TEXT');
         self::ensureColumn('work_orders', 'qty_was', 'INTEGER');
         self::ensureColumn('work_orders', 'qty_changed_at', 'TEXT');
-        self::ensureColumn('bundle_items', 'sort_order', 'INTEGER NOT NULL DEFAULT 0');
         self::ensureColumn('users', 'preferred_currency', "TEXT NOT NULL DEFAULT ''");
-        self::ensureColumn('users', 'tray_rate', 'INTEGER NOT NULL DEFAULT 10');
-        self::ensureColumn('users', 'discount_percent', 'INTEGER NOT NULL DEFAULT 0');
         self::ensureColumn('orders', 'manual_discount_cents', 'INTEGER NOT NULL DEFAULT 0');
         self::ensureColumn('products', 'colours', "TEXT NOT NULL DEFAULT ''");
+        self::retireWholesaleAccounts();
         self::seedDefaults();
     }
 
@@ -92,6 +90,43 @@ class Database
         if (!$exists) {
             $pdo->exec("ALTER TABLE {$table} ADD COLUMN {$column} {$definition}");
         }
+    }
+
+    /** Drop a column when it exists (SQLite 3.35+). */
+    public static function dropColumn(string $table, string $column): void
+    {
+        $pdo = self::pdo();
+        $exists = false;
+        foreach ($pdo->query("PRAGMA table_info(" . $table . ")") as $col) {
+            if (($col['name'] ?? '') === $column) { $exists = true; break; }
+        }
+        if (!$exists) {
+            return;
+        }
+        try {
+            $pdo->exec("ALTER TABLE {$table} DROP COLUMN {$column}");
+        } catch (\Throwable $e) {
+            // Older SQLite cannot DROP COLUMN; leave the unused field in place.
+        }
+    }
+
+    /** Convert leftover wholesale/guest accounts and drop unused user columns. */
+    private static function retireWholesaleAccounts(): void
+    {
+        $pdo = self::pdo();
+        try {
+            $pdo->exec(
+                "UPDATE users SET role = 'staff',
+                    status = CASE WHEN status = 'pending' THEN 'disabled' ELSE status END
+                 WHERE role IN ('wholesale', 'guest')"
+            );
+            $pdo->exec("UPDATE users SET status = 'disabled' WHERE status = 'pending'");
+        } catch (\Throwable $e) {
+            // users table may not exist yet on a brand-new install before schema ran.
+        }
+        self::dropColumn('users', 'tray_rate');
+        self::dropColumn('users', 'discount_percent');
+        self::dropColumn('users', 'ignore_min_quantities');
     }
 
     private static function seedDefaults(): void

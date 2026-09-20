@@ -10,7 +10,7 @@ $vendorOpts = json_encode($vendors ?? [['value' => 0, 'label' => '—']], JSON_U
     <div class="page-head"><div><h1><?= Icons::get('box', 22) ?> Products</h1>
       <p class="muted"><?= $readonly
         ? 'Catalog is read-only for staff accounts.'
-        : 'Shopify sync fills the catalog. Set Vendor, Min (restock trigger) and Goal (target on-hand). Select more than one row to bulk-set status. Double-click a cell to edit.' ?></p></div>
+        : 'Shopify sync fills the catalog. Set Vendor, Min (restock trigger) and Goal (target on-hand). Select more than one row to bulk-set status, Min, or Goal. Double-click a cell to edit.' ?></p></div>
       <?php if (!$readonly): ?>
       <button type="button" class="btn btn-danger" id="deleteAllBtn"><?= Icons::get('trash', 16) ?> Delete all products</button>
       <?php endif; ?>
@@ -45,6 +45,10 @@ new hd.DataGrid('productsGrid', {
   selectable: true,
   bulk: [
     {key:'status', label:'Set status', options:[{value:'active',label:'active'},{value:'inactive',label:'inactive'}]}
+  ],
+  bulkNumber: [
+    {key:'min_qty', label:'Set min', min:0, tip:'Set minimum quantity for restock'},
+    {key:'goal_qty', label:'Set goal', min:0, tip:'Goal Stock Level'}
   ],
   columns: [
     {key:'id', label:'#'},

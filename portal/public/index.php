@@ -12,7 +12,6 @@ require dirname(__DIR__) . '/app/bootstrap.php';
 use App\Auth;
 use App\Controllers\PublicController;
 use App\Controllers\AuthController;
-use App\Controllers\WholesaleController;
 use App\Controllers\AdminController;
 use App\Controllers\MessageController;
 use App\Controllers\ApiController;
@@ -27,12 +26,14 @@ try {
     switch ($route) {
         // ---- Public ----------------------------------------------------
         case 'home':            PublicController::home(); break;
-        case 'page':            PublicController::page(); break;
-        case 'search':          PublicController::search(); break;          // AJAX
-        case 'product':         PublicController::product(); break;
-        case 'bundle':          PublicController::bundle(); break;
-        case 'apply':           PublicController::applyForm(); break;
-        case 'apply.submit':    PublicController::applySubmit(); break;
+        case 'page':
+        case 'search':
+        case 'product':
+        case 'bundle':
+        case 'apply':
+        case 'apply.submit':
+            redirect('home');
+            break;
 
         // ---- Auth ------------------------------------------------------
         case 'login':           AuthController::loginForm(); break;
@@ -41,18 +42,20 @@ try {
         case 'account':         AuthController::account(); break;
         case 'account.save':    AuthController::accountSave(); break;
 
-        // ---- Wholesale -------------------------------------------------
-        case 'dashboard':       WholesaleController::dashboard(); break;
-        case 'catalog':         WholesaleController::catalog(); break;
-        case 'cart':            WholesaleController::cart(); break;
-        case 'cart.add':        WholesaleController::cartAdd(); break;       // AJAX
-        case 'cart.update':     WholesaleController::cartUpdate(); break;    // AJAX
-        case 'cart.remove':     WholesaleController::cartRemove(); break;    // AJAX
-        case 'checkout':        WholesaleController::checkout(); break;
-        case 'orders':          WholesaleController::orders(); break;
-        case 'order':           WholesaleController::orderView(); break;
-        case 'order.cancel':    WholesaleController::orderCancel(); break;
-        case 'order.print':     WholesaleController::orderPrint(); break;
+        // ---- Signed-in home (legacy wholesale routes redirect) ---------
+        case 'dashboard':
+        case 'catalog':
+        case 'cart':
+        case 'cart.add':
+        case 'cart.update':
+        case 'cart.remove':
+        case 'checkout':
+        case 'orders':
+        case 'order':
+        case 'order.cancel':
+        case 'order.print':
+            redirect('home');
+            break;
 
         // ---- Messaging (chatbox) --------------------------------------
         case 'chat.poll':       MessageController::poll(); break;           // AJAX
@@ -67,7 +70,7 @@ try {
         case 'admin/vendors':   AdminController::vendors(); break;
         case 'admin/vendor-products': AdminController::vendorProducts(); break;
         case 'admin/products':  AdminController::products(); break;
-        case 'admin/bundles':   AdminController::bundles(); break;
+        case 'admin/bundles':   redirect('admin/products'); break;
         case 'admin/messages':  AdminController::messages(); break;
         case 'admin/work-orders':
         case 'admin/restock-orders': AdminController::workOrders(); break;

@@ -40,14 +40,9 @@ class AdminController
             'editable' => ['vendor_id', 'vendor_product_id', 'sku', 'title', 'price_cents', 'stock', 'status', 'source_url', 'matched_product_id', 'archived'],
             'archivable' => true,
         ],
-        'bundles' => [
-            'table' => 'bundles',
-            'editable' => ['title', 'description', 'is_public', 'archived'],
-            'archivable' => true,
-        ],
         'users' => [
             'table' => 'users',
-            'editable' => ['email', 'role', 'status', 'ignore_min_quantities', 'tray_rate', 'discount_percent', 'first_name', 'last_name',
+            'editable' => ['email', 'role', 'status', 'first_name', 'last_name',
                            'fin_first_name', 'fin_last_name', 'phone', 'company_website',
                            'office_address', 'delivery_address'],
             'archivable' => false,
@@ -73,18 +68,6 @@ class AdminController
             return;
         }
 
-        $pendingApps = $pdo->query(
-            "SELECT * FROM users WHERE status = 'pending' ORDER BY created_at DESC"
-        )->fetchAll();
-
-        // New orders sorted with payment pending first, then newest.
-        $newOrders = $pdo->query(
-            "SELECT o.*, u.email AS client_email FROM orders o JOIN users u ON u.id = o.user_id
-             WHERE o.archived = 0
-             ORDER BY (o.payment_status = 'pending') DESC, o.created_at DESC LIMIT 15"
-        )->fetchAll();
-
-        // Threads with unread (client/staff) messages awaiting admin reply.
         $unread = $pdo->query(
             "SELECT m.thread_user_id, u.email, COUNT(*) AS unread, MAX(m.created_at) AS last_at
              FROM messages m JOIN users u ON u.id = m.thread_user_id
@@ -95,25 +78,17 @@ class AdminController
 
         $activity = $pdo->query('SELECT * FROM activity ORDER BY created_at DESC LIMIT 20')->fetchAll();
 
-        $stats = [
-            'orders'    => (int)$pdo->query('SELECT COUNT(*) FROM orders')->fetchColumn(),
-            'pending_pay' => (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE payment_status='pending' AND status<>'cancelled'")->fetchColumn(),
-            'clients'   => (int)$pdo->query("SELECT COUNT(*) FROM users WHERE role='wholesale'")->fetchColumn(),
-            'revenue'   => (int)$pdo->query("SELECT COALESCE(SUM(total_cents),0) FROM orders WHERE payment_status='paid'")->fetchColumn(),
-        ];
         $restock = RestockOrders::stats();
-        $stats['vendors'] = (int)$pdo->query('SELECT COUNT(*) FROM vendors WHERE archived = 0')->fetchColumn();
-        $stats['below_min'] = $restock['below_min'];
-        $stats['fulfillable'] = $restock['fulfillable'];
-        $stats['unfulfillable'] = $restock['unfulfillable'];
+        $stats = [
+            'vendors' => (int)$pdo->query('SELECT COUNT(*) FROM vendors WHERE archived = 0')->fetchColumn(),
+            'below_min' => $restock['below_min'],
+            'fulfillable' => $restock['fulfillable'],
+            'unfulfillable' => $restock['unfulfillable'],
+        ];
 
         View::render('admin/dashboard', [
             'title' => 'Admin', 'active' => 'dashboard',
-            'pendingApps' => $pendingApps, 'newOrders' => $newOrders,
             'unread' => $unread, 'activity' => $activity, 'stats' => $stats,
-            'readyOrders' => Auth::isSuperuser() ? WorkOrders::readyForApproval() : [],
-            'unassignedOrders' => WorkOrders::unassignedProvisioning(),
-            'stalledWork' => WorkOrders::stalledItems(),
             'restockGroups' => RestockOrders::grouped(),
         ]);
     }
@@ -121,10 +96,7 @@ class AdminController
     public static function users(): void
     {
         Auth::requireAdmin();
-        $pending = Database::pdo()->query(
-            "SELECT * FROM users WHERE status = 'pending' ORDER BY created_at DESC"
-        )->fetchAll();
-        View::render('admin/users', ['title' => 'Users', 'active' => 'users', 'pending' => $pending,
+        View::render('admin/users', ['title' => 'Users', 'active' => 'users',
             'canGrantAdmin' => Auth::isSuperuser(),
             'hiddenCols' => UserPrefs::hiddenColumns(Auth::id(), UserPrefs::GRID_USERS, [])]);
     }
@@ -176,19 +148,7 @@ class AdminController
 
     public static function bundles(): void
     {
-        Auth::requireStaffOrAdmin();
-        $pdo = Database::pdo();
-        $bundles = $pdo->query('SELECT * FROM bundles ORDER BY title')->fetchAll();
-        $items = $pdo->query(
-            'SELECT bi.*, p.title, p.price_cents FROM bundle_items bi JOIN products p ON p.id = bi.product_id
-             ORDER BY bi.bundle_id, bi.sort_order, bi.id'
-        )->fetchAll();
-        $byBundle = [];
-        foreach ($items as $it) { $byBundle[(int)$it['bundle_id']][] = $it; }
-        $products = $pdo->query('SELECT id, title, price_cents FROM products WHERE archived = 0 ORDER BY title')->fetchAll();
-        View::render('admin/bundles', ['title' => 'Bundles', 'active' => 'bundles',
-            'bundles' => $bundles, 'byBundle' => $byBundle, 'products' => $products,
-            'readonly' => Auth::isStaff()]);
+        redirect('admin/products');
     }
 
     public static function workOrders(): void
@@ -353,7 +313,6 @@ class AdminController
         if (Auth::isStaff()) {
             $allowed = [
                 'products' => ['list'],
-                'bundles' => ['list'],
                 'vendors' => ['list'],
                 'vendor_products' => ['list'],
             ];
@@ -365,7 +324,7 @@ class AdminController
         // Special (non-grid) entities (admin only beyond this point, except list above).
         if ($entity === 'messages') { self::messagesApi($op, $body); }
         if ($entity === 'analytics') { self::analyticsApi($op, $body); }
-        if ($entity === 'bundle_items') { self::bundleItemsApi($op, $body); }
+        if ($entity === 'bundle_items') { json_response(['error' => 'unknown_entity'], 400); }
         if ($entity === 'user_action') { self::userActionApi($op, $body); }
         if ($entity === 'shopify') { self::shopifyApi($op, $body); }
         if ($entity === 'settings') { self::settingsApi($op, $body); }
@@ -392,7 +351,7 @@ class AdminController
                 // Only the superuser may elevate a user to the admin role.
                 if ($entity === 'users' && isset($changes['role'])) {
                     $role = (string)$changes['role'];
-                    if (!in_array($role, ['guest', 'wholesale', 'staff', 'admin'], true)) {
+                    if (!in_array($role, ['staff', 'admin'], true)) {
                         json_response(['error' => 'bad_role'], 400);
                     }
                     if ($role === 'admin' && !Auth::isSuperuser()) {
@@ -471,21 +430,8 @@ class AdminController
                     $changes['colours'] = implode(',', $list);
                     unset($changes['variegated']);
                 }
-                if ($entity === 'users' && array_key_exists('tray_rate', $changes)) {
-                    $changes['tray_rate'] = max(1, (int)$changes['tray_rate']);
-                }
-                if ($entity === 'users' && array_key_exists('discount_percent', $changes)) {
-                    $changes['discount_percent'] = max(0, min(100, (int)$changes['discount_percent']));
-                }
                 if ($entity === 'orders' && array_key_exists('manual_discount_cents', $changes)) {
                     $changes['manual_discount_cents'] = max(0, (int)$changes['manual_discount_cents']);
-                }
-                if ($entity === 'bundles' && array_key_exists('title', $changes)) {
-                    $title = trim((string)$changes['title']);
-                    if ($title === '') {
-                        json_response(['error' => 'bad_title', 'message' => 'Bundle name cannot be empty.'], 400);
-                    }
-                    $changes['title'] = $title;
                 }
                 foreach ($changes as $col => $val) {
                     if (!in_array($col, $schema['editable'], true)) continue;
@@ -586,24 +532,6 @@ class AdminController
 
             case 'delete':
                 $id = (int)($body['id'] ?? 0);
-                if ($entity === 'bundles') {
-                    if (empty($body['confirm'])) {
-                        json_response(['error' => 'confirmation_required', 'message' => 'Confirm that this cannot be undone.'], 400);
-                    }
-                    $pdo->beginTransaction();
-                    try {
-                        Catalog::deleteBundle($id);
-                        $pdo->prepare('INSERT INTO activity (user_id, type, description) VALUES (?,?,?)')
-                            ->execute([Auth::id(), 'bundles', 'Deleted bundle #' . $id]);
-                        $pdo->commit();
-                    } catch (\Throwable $e) {
-                        if ($pdo->inTransaction()) {
-                            $pdo->rollBack();
-                        }
-                        json_response(['error' => 'delete_failed', 'message' => 'Could not delete the bundle.'], 500);
-                    }
-                    json_response(['ok' => true]);
-                }
                 if ($entity === 'products') {
                     $pdo->prepare('UPDATE order_items SET product_id = NULL WHERE product_id = ?')->execute([$id]);
                     $pdo->prepare('UPDATE vendor_products SET matched_product_id = NULL WHERE matched_product_id = ?')->execute([$id]);
@@ -670,7 +598,7 @@ class AdminController
             if (!empty($filters['to'])) { $where[] = 'date(o.created_at) <= ?'; $params[] = $filters['to']; }
             if (empty($filters['include_archived'])) { $where[] = 'o.archived = 0'; }
             $sql = "SELECT o.id, u.email AS client, o.status, o.payment_status, o.total_cents,
-                           o.manual_discount_cents, u.discount_percent, o.tracking_url, o.notes, o.admin_notes, o.archived, o.created_at
+                           o.manual_discount_cents, o.tracking_url, o.notes, o.admin_notes, o.archived, o.created_at
                     FROM orders o JOIN users u ON u.id = o.user_id";
             if ($where) $sql .= ' WHERE ' . implode(' AND ', $where);
             $sql .= ' ORDER BY (o.payment_status = "pending") DESC, o.created_at DESC';
@@ -700,13 +628,10 @@ class AdminController
         if ($entity === 'vendor_products') {
             return Vendors::products($filters);
         }
-        if ($entity === 'bundles') {
-            return $pdo->query('SELECT id, title, description, is_public, archived FROM bundles ORDER BY title')->fetchAll();
-        }
         if ($entity === 'users') {
             return $pdo->query(
                 "SELECT id, email, role, status, first_name, last_name, phone, company_website,
-                        ignore_min_quantities, tray_rate, discount_percent, created_at,
+                        created_at,
                         CASE WHEN password_hash IS NOT NULL AND password_hash <> '' THEN 1 ELSE 0 END AS has_password
                  FROM users WHERE id > 0 ORDER BY created_at DESC"
             )->fetchAll();
@@ -724,11 +649,9 @@ class AdminController
             return Vendors::create();
         } elseif ($entity === 'vendor_products') {
             return Vendors::createProduct();
-        } elseif ($entity === 'bundles') {
-            $pdo->exec("INSERT INTO bundles (title, is_public) VALUES ('New bundle', 0)");
         } elseif ($entity === 'users') {
             $email = 'user' . time() . '@example.com';
-            $pdo->prepare("INSERT INTO users (email, role, status) VALUES (?, 'guest', 'active')")->execute([$email]);
+            $pdo->prepare("INSERT INTO users (email, role, status) VALUES (?, 'staff', 'active')")->execute([$email]);
         } elseif ($entity === 'orders') {
             // Orders are created by clients; block manual creation to preserve integrity.
             json_response(['error' => 'Orders are created by clients at checkout.'], 400);
@@ -928,7 +851,7 @@ class AdminController
         $pdo = Database::pdo();
         if ($op === 'recipients') {
             $rows = $pdo->query(
-                "SELECT id, email, role, first_name, last_name FROM users WHERE status IN ('active','pending') ORDER BY role, email"
+                "SELECT id, email, role, first_name, last_name FROM users WHERE status = 'active' ORDER BY role, email"
             )->fetchAll();
             json_response(['recipients' => array_map(static function (array $u): array {
                 $name = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
@@ -1174,28 +1097,17 @@ class AdminController
         json_response(['error' => 'unknown_op'], 400);
     }
 
-    /* ---------- User actions (approval / privileges) ---------- */
+    /* ---------- User actions (role / status) ---------- */
 
     private static function userActionApi(string $op, array $body): void
     {
         $pdo = Database::pdo();
         $uid = (int)($body['id'] ?? 0);
 
-        if ($op === 'approve') {
-            // Approve a wholesale application: guest -> wholesale, active.
-            $ignoreMin = to_bool_int($body['ignore_min_quantities'] ?? 0);
-            $pdo->prepare("UPDATE users SET role = 'wholesale', status = 'active', ignore_min_quantities = ?, approved_at = datetime('now'), updated_at = datetime('now') WHERE id = ?")
-                ->execute([$ignoreMin, $uid]);
-            $pdo->prepare('INSERT INTO activity (user_id, type, description) VALUES (?,?,?)')
-                ->execute([$uid, 'approval', 'Wholesale account approved']);
-            json_response(['ok' => true]);
-        }
-
         if ($op === 'set_role') {
-            $role = (string)($body['role'] ?? 'guest');
-            $allowed = ['guest', 'wholesale', 'staff', 'admin'];
+            $role = (string)($body['role'] ?? 'staff');
+            $allowed = ['staff', 'admin'];
             if (!in_array($role, $allowed, true)) json_response(['error' => 'bad_role'], 400);
-            // Only the superuser may grant/revoke ADMIN (superuser-level) privileges.
             if ($role === 'admin' && !Auth::isSuperuser()) {
                 json_response(['error' => 'Only the superuser can grant administrator privileges.'], 403);
             }
@@ -1205,13 +1117,8 @@ class AdminController
 
         if ($op === 'set_status') {
             $status = (string)($body['status'] ?? 'active');
-            if (!in_array($status, ['active', 'pending', 'disabled'], true)) json_response(['error' => 'bad_status'], 400);
+            if (!in_array($status, ['active', 'disabled'], true)) json_response(['error' => 'bad_status'], 400);
             $pdo->prepare("UPDATE users SET status = ?, updated_at = datetime('now') WHERE id = ?")->execute([$status, $uid]);
-            json_response(['ok' => true]);
-        }
-
-        if ($op === 'toggle_ignore_min') {
-            $pdo->prepare('UPDATE users SET ignore_min_quantities = 1 - ignore_min_quantities WHERE id = ?')->execute([$uid]);
             json_response(['ok' => true]);
         }
 
