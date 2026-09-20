@@ -320,7 +320,7 @@ class RestockOrders
             }
             if ($q !== '') {
                 $g['lines'] = array_values(array_filter($g['lines'], static function (array $line) use ($q): bool {
-                    $hay = strtolower(trim(($line['sku'] ?? '') . ' ' . ($line['product_id'] ?? '') . ' ' . ($line['title'] ?? '')));
+                    $hay = strtolower(trim(($line['sku'] ?? '') . ' ' . ($line['product_id'] ?? '') . ' ' . ($line['title'] ?? '') . ' ' . ($line['collection_name'] ?? '')));
                     return str_contains($hay, $q);
                 }));
             }
@@ -334,11 +334,13 @@ class RestockOrders
 
     /**
      * Sort report lines. Default is Inv (stock) lowest to highest.
+     * When $group is source, rows with the same Source Name stay together
+     * and $key/$dir apply inside each group.
      *
      * @param list<array<string,mixed>> $lines
      * @return list<array<string,mixed>>
      */
-    public static function sortLines(array $lines, string $key = 'stock', string $dir = 'asc'): array
+    public static function sortLines(array $lines, string $key = 'stock', string $dir = 'asc', string $group = '', string $groupDir = 'asc'): array
     {
         $dirMul = strtolower($dir) === 'desc' ? -1 : 1;
         $key = match ($key) {
@@ -347,10 +349,11 @@ class RestockOrders
             'name', 'title' => 'title',
             'total' => 'total',
             'sku' => 'sku',
+            'source', 'source_name', 'collection', 'collection_name' => 'collection_name',
             'inv', 'stock' => 'stock',
             default => 'stock',
         };
-        usort($lines, static function (array $a, array $b) use ($key, $dirMul): int {
+        $cmpLines = static function (array $a, array $b) use ($key, $dirMul): int {
             if ($key === 'total') {
                 $cmp = (((int)($a['stock'] ?? 0) + (int)($a['need_qty'] ?? 0))
                     <=> ((int)($b['stock'] ?? 0) + (int)($b['need_qty'] ?? 0)));
@@ -363,8 +366,32 @@ class RestockOrders
                 $cmp = ((int)($a['catalog_id'] ?? 0)) <=> ((int)($b['catalog_id'] ?? 0));
             }
             return $cmp * $dirMul;
-        });
-        return array_values($lines);
+        };
+        $group = match (strtolower($group)) {
+            'source', 'source_name', 'collection', 'collection_name' => 'collection_name',
+            default => '',
+        };
+        if ($group === '') {
+            usort($lines, $cmpLines);
+            return array_values($lines);
+        }
+        $gmul = strtolower($groupDir) === 'desc' ? -1 : 1;
+        $buckets = [];
+        foreach ($lines as $line) {
+            $gk = strtolower((string)($line[$group] ?? ''));
+            $buckets[$gk][] = $line;
+        }
+        $names = array_keys($buckets);
+        usort($names, static fn(string $a, string $b): int => strcasecmp($a, $b) * $gmul);
+        $out = [];
+        foreach ($names as $gk) {
+            $chunk = $buckets[$gk];
+            usort($chunk, $cmpLines);
+            foreach ($chunk as $line) {
+                $out[] = $line;
+            }
+        }
+        return $out;
     }
 
     /**
@@ -583,6 +610,7 @@ class RestockOrders
             $out[] = $i . '. ' . (string)($l['title'] ?? '');
             $out[] = '   SKU: ' . self::displayCode($l['sku'] ?? '');
             $out[] = '   Product ID: ' . self::displayCode($l['product_id'] ?? '');
+            $out[] = '   Source: ' . self::displayCode($l['collection_name'] ?? '');
             $out[] = '   Current inventory: ' . (int)($l['stock'] ?? 0);
             $out[] = '   Order quantity: ' . (int)($l['need_qty'] ?? 0)
                 . '  (goal ' . (int)($l['goal_qty'] ?? 0) . ' − current ' . (int)($l['stock'] ?? 0) . ')';
@@ -613,6 +641,7 @@ class RestockOrders
                 self::displayCode($l['sku'] ?? ''),
                 self::displayCode($l['product_id'] ?? ''),
                 (string)($l['title'] ?? ''),
+                self::displayCode($l['collection_name'] ?? ''),
                 (string)$inv,
                 (string)$need,
                 (string)($inv + $need),
@@ -626,7 +655,7 @@ class RestockOrders
                 'Date: ' . date('j F Y'),
                 count($lines) . ' item' . (count($lines) === 1 ? '' : 's') . ' below goal',
             ],
-            'headers' => ['SKU', 'Product ID', 'Product Name', 'Inv', 'Order Qty', 'Total'],
+            'headers' => ['SKU', 'Product ID', 'Product Name', 'Source Name', 'Inv', 'Order Qty', 'Total'],
             'rows' => $rows,
             'footer' => 'Please supply the listed quantities so on-hand stock can return to goal levels. Thank you.',
         ]);

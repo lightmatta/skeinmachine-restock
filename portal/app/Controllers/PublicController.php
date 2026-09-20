@@ -40,7 +40,9 @@ class PublicController
             $report['lines'] = RestockOrders::sortLines(
                 $report['lines'],
                 (string)($_GET['sort'] ?? 'stock'),
-                (string)($_GET['dir'] ?? 'asc')
+                (string)($_GET['dir'] ?? 'asc'),
+                (string)($_GET['group'] ?? ''),
+                (string)($_GET['gdir'] ?? 'asc')
             );
         }
         $pdf = RestockOrders::reportPdf($report);

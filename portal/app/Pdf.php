@@ -61,7 +61,9 @@ class Pdf
         $y -= 10;
 
         $n = max(1, count($headers));
-        if ($n === 6) {
+        if ($n === 7) {
+            $widths = [68, 62, $usable - 68 - 62 - 78 - 40 - 54 - 36, 78, 40, 54, 36];
+        } elseif ($n === 6) {
             $widths = [78, 78, $usable - 78 - 78 - 44 - 62 - 44, 44, 62, 44];
         } elseif ($n === 5) {
             $widths = [86, 86, $usable - 86 - 86 - 48 - 70, 48, 70];
@@ -75,7 +77,7 @@ class Pdf
             $colX[] = $x;
             $x += $w;
         }
-        $clips = $n === 6 ? [12, 12, 28, 6, 8, 6] : array_fill(0, $n, 22);
+        $clips = $n === 7 ? [10, 10, 22, 12, 5, 7, 5] : ($n === 6 ? [12, 12, 28, 6, 8, 6] : array_fill(0, $n, 22));
         $rowH = 18;
         $headerH = 20;
 

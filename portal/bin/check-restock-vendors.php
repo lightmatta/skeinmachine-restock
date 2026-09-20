@@ -105,6 +105,15 @@ sort($hdSorted, SORT_NUMERIC);
 expect($hdStocks === $hdSorted, 'Report lines default to Inv lowest to highest');
 $byTitle = App\RestockOrders::sortLines($repByName['House Dye Wholesale']['lines'], 'title', 'asc');
 expect(isset($byTitle[0], $byTitle[1]) && strcasecmp((string)$byTitle[0]['title'], (string)$byTitle[1]['title']) <= 0, 'Report lines can be sorted by product name');
+$mixed = [
+    ['catalog_id' => 1, 'title' => 'A-high', 'collection_name' => 'Alpha', 'stock' => 9, 'need_qty' => 1],
+    ['catalog_id' => 2, 'title' => 'B-low', 'collection_name' => 'Beta', 'stock' => 1, 'need_qty' => 1],
+    ['catalog_id' => 3, 'title' => 'A-low', 'collection_name' => 'Alpha', 'stock' => 2, 'need_qty' => 1],
+];
+$groupedInv = App\RestockOrders::sortLines($mixed, 'stock', 'asc', 'source', 'asc');
+expect(array_column($groupedInv, 'title') === ['A-low', 'A-high', 'B-low'], 'Group by Source Name keeps sources together while sorting Inv inside each group');
+$groupedDesc = App\RestockOrders::sortLines($mixed, 'stock', 'desc', 'source', 'desc');
+expect(array_column($groupedDesc, 'title') === ['B-low', 'A-high', 'A-low'], 'Grouped Source Name can reverse group order and inner Inv sort');
 $adeIds = array_map('intval', array_column($adelaide['lines'], 'catalog_id'));
 $revIds = array_reverse($adeIds);
 $reordered = App\RestockOrders::orderLines($adelaide['lines'], implode(',', $revIds));
@@ -113,6 +122,7 @@ $text = App\RestockOrders::reportText($repByName['House Dye Wholesale']);
 expect(str_contains($text, 'Restock Request Form'), 'Copy text is labelled Restock Request Form');
 expect(str_contains($text, 'House Dye Wholesale / Yarn Collection'), 'Copy text names vendor / collection');
 expect(str_contains($text, 'SKU: YRN-MERINO-01'), 'Copy text includes SKU');
+expect(str_contains($text, 'Source: Yarn Collection') || str_contains($text, 'Source:'), 'Copy text includes Source Name');
 expect(str_contains($text, 'Current inventory:'), 'Copy text includes current inventory');
 expect(str_contains($text, 'Order quantity:'), 'Copy text includes order qty');
 expect(str_contains($text, 'Total:'), 'Copy text includes Total');
@@ -132,6 +142,7 @@ $blankGroup = [
 $blankText = App\RestockOrders::reportText($blankGroup);
 expect(str_contains($blankText, 'SKU: unknown'), 'Copy text uses unknown for a missing SKU');
 expect(str_contains($blankText, 'Product ID: unknown'), 'Copy text uses unknown for a missing product ID');
+expect(str_contains($blankText, 'Source: unknown'), 'Copy text uses unknown for a missing Source Name');
 $blankPdf = App\RestockOrders::reportPdf($blankGroup);
 expect(str_contains($blankPdf, 'unknown'), 'PDF uses unknown for missing SKU or product ID');
 expect(App\RestockOrders::urgencyColor(0, 10) === App\RestockOrders::URGENCY_RED, 'Zero inventory is pastel red');
@@ -153,6 +164,7 @@ expect(str_starts_with($pdf, '%PDF-1.4'), 'PDF writer emits PDF 1.4');
 expect(str_contains($pdf, 'Restock Request Form'), 'PDF is labelled Restock Request Form');
 expect(str_contains($pdf, 'Adelaide Notions / Bowls, Markers'), 'PDF uses the grouped vendor / collection label');
 expect(str_contains($pdf, 'Total'), 'PDF includes a Total column');
+expect(str_contains($pdf, 'Source Name'), 'PDF includes a Source Name column');
 expect(str_contains($pdf, '0 0 0 rg'), 'PDF body text is black');
 expect(str_contains($pdf, '0 0 0 RG'), 'PDF table outlines are black');
 expect(str_contains(App\RestockOrders::reportFilename($adelaide), 'adelaide-notions'), 'PDF filename slugs the vendor group');
@@ -222,6 +234,9 @@ expect(str_contains($homeSrc, 'td.col-name'), 'Full product name popover is boun
 expect(str_contains($homeSrc, 'copyPreviewModal'), 'Copy as text opens a preview');
 expect(str_contains($homeSrc, 'function sortCard'), 'Reports sort when a column header is clicked');
 expect(str_contains($homeSrc, 'data-sort="stock"'), 'Inv is the default sort column');
+expect(str_contains($homeSrc, 'data-sort="source"'), 'Reports has a Source Name column');
+expect(str_contains($homeSrc, 'groupBySource'), 'Reports can group by Source Name');
+expect(str_contains($homeSrc, 'isGrouped'), 'Grouped header sorts keep source rows together');
 expect(str_contains($homeSrc, '&order='), 'PDF link includes the visible row order');
 expect(!str_contains($homeSrc, 'Desired Goal'), 'Old goal-minus-stock column title is gone');
 
