@@ -203,7 +203,7 @@ page_script(<<<'JS'
     });
   }
 
-  document.querySelectorAll('.col-name').forEach(function(td){
+  document.querySelectorAll('td.col-name').forEach(function(td){
     td.addEventListener('click', function(e){
       e.stopPropagation();
       var open = td.classList.contains('is-open');

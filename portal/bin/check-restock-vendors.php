@@ -172,7 +172,12 @@ expect(str_contains($homeSrc, 'Order Quantity'), 'Reports column is Order Quanti
 expect(str_contains($homeSrc, 'Current Inventory Stock Level'), 'Inv column hover explains current inventory');
 expect(str_contains($homeSrc, '>Total<') || str_contains($homeSrc, 'Inv + Order Quantity'), 'Reports has a Total column');
 expect(str_contains($homeSrc, 'col-name'), 'Product name uses a truncating column');
+expect(str_contains($homeSrc, 'td.col-name'), 'Full product name popover is bound to name cells, not the header');
 expect(!str_contains($homeSrc, 'Desired Goal'), 'Old goal-minus-stock column title is gone');
+
+$cssSrc = file_get_contents($root . '/public/assets/app.css');
+expect(str_contains($cssSrc, 'text-transform: none'), 'Report table headers are not forced uppercase');
+expect(str_contains($cssSrc, '.col-qty { width: 20%; }') || str_contains($cssSrc, '.col-qty { width: 20%'), 'Order Quantity column has dedicated width');
 
 $jsSrc = file_get_contents($root . '/public/assets/app.js');
 expect(str_contains($jsSrc, 'currentlyAll'), 'Check-all toggles all on or all off');

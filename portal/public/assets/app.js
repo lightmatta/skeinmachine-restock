@@ -815,7 +815,10 @@
             const head = this.mount.querySelector(".grid-check-all");
             if (head) {
               const visible = this.filteredRows();
-              head.checked = visible.length > 0 && visible.every((row) => this.selected.has(row.id));
+              const allOn = visible.length > 0 && visible.every((row) => this.selected.has(row.id));
+              const someOn = visible.some((row) => this.selected.has(row.id));
+              head.checked = allOn;
+              head.indeterminate = someOn && !allOn;
             }
           });
           td.appendChild(cb);
