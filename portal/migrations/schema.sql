@@ -4,8 +4,8 @@ CREATE TABLE IF NOT EXISTS users (
     id                   INTEGER PRIMARY KEY AUTOINCREMENT,
     email                TEXT NOT NULL UNIQUE,
     password_hash        TEXT,
-    role                 TEXT NOT NULL DEFAULT 'guest',      -- guest | wholesale | staff | admin
-    status               TEXT NOT NULL DEFAULT 'pending',    -- pending | active | disabled
+    role                 TEXT NOT NULL DEFAULT 'staff',      -- staff | admin
+    status               TEXT NOT NULL DEFAULT 'active',     -- active | disabled
     first_name           TEXT,
     last_name            TEXT,
     fin_first_name       TEXT,
@@ -15,9 +15,6 @@ CREATE TABLE IF NOT EXISTS users (
     delivery_address     TEXT,
     company_website      TEXT,
     application_message  TEXT,
-    ignore_min_quantities INTEGER NOT NULL DEFAULT 0,
-    tray_rate            INTEGER NOT NULL DEFAULT 10,   -- max trays this staff member can complete per day
-    discount_percent     INTEGER NOT NULL DEFAULT 0,    -- 0 = use global wholesale_percent; else % of retail
     preferred_currency   TEXT NOT NULL DEFAULT '',
     created_at           TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at           TEXT NOT NULL DEFAULT (datetime('now')),
@@ -37,10 +34,13 @@ CREATE TABLE IF NOT EXISTS products (
     is_public    INTEGER NOT NULL DEFAULT 1,
     status       TEXT NOT NULL DEFAULT 'active',   -- active | inactive (admin-controlled; preserved across Shopify sync)
     shopify_product_id TEXT,                        -- set for products imported/synced from Shopify
-    min_qty      INTEGER NOT NULL DEFAULT 10,       -- wholesale minimum order quantity (admin-editable)
-    spt          INTEGER NOT NULL DEFAULT 10,       -- skeins per tray (admin-editable)
-    warehouse_stock INTEGER NOT NULL DEFAULT 0,     -- warehouse stock (admin-editable; excess production credits)
-    colours      TEXT NOT NULL DEFAULT '',          -- comma-separated metafield colours + variegated
+    min_qty      INTEGER NOT NULL DEFAULT 0,        -- restock minimum (admin-editable; triggers Restock Orders)
+    goal_qty     INTEGER NOT NULL DEFAULT 0,        -- goal stock level used to recommend reorder qty
+    vendor_id    INTEGER,                           -- preferred supplier for restock
+    source_id    INTEGER,                           -- sources.id this product was synced from
+    spt          INTEGER NOT NULL DEFAULT 10,       -- retained for existing installs; hidden from products grid
+    warehouse_stock INTEGER NOT NULL DEFAULT 0,     -- retained for existing installs; hidden from products grid
+    colours      TEXT NOT NULL DEFAULT '',          -- retained for existing installs; hidden from products grid
     archived     INTEGER NOT NULL DEFAULT 0,
     created_at   TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
@@ -108,6 +108,64 @@ CREATE TABLE IF NOT EXISTS messages (
     FOREIGN KEY (thread_user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS sources (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    vendor_name          TEXT NOT NULL,
+    collection_id        TEXT NOT NULL DEFAULT '',
+    collection_name      TEXT NOT NULL DEFAULT '',
+    sync_frequency_days  INTEGER NOT NULL DEFAULT 1,
+    last_sync_at         TEXT,
+    next_sync_at         TEXT,
+    archived             INTEGER NOT NULL DEFAULT 0,
+    created_at           TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at           TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS vendors (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    vendor_id    TEXT,                                  -- external / display vendor code
+    name         TEXT NOT NULL,
+    stock_urls   TEXT NOT NULL DEFAULT '',              -- one URL per line, or a JSON array
+    notes        TEXT,
+    archived     INTEGER NOT NULL DEFAULT 0,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS vendor_products (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    vendor_id           INTEGER NOT NULL,
+    matched_product_id  INTEGER,                        -- catalog products.id when matched
+    vendor_product_id   TEXT,
+    sku                 TEXT,
+    title               TEXT NOT NULL,
+    price_cents         INTEGER NOT NULL DEFAULT 0,
+    stock               INTEGER NOT NULL DEFAULT 0,
+    status              TEXT NOT NULL DEFAULT 'active', -- active | inactive
+    source_url          TEXT,
+    archived            INTEGER NOT NULL DEFAULT 0,
+    created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE,
+    FOREIGN KEY (matched_product_id) REFERENCES products(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS restock_schedules (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    vendor_id          INTEGER NOT NULL,
+    product_id         INTEGER NOT NULL,
+    vendor_product_id  INTEGER,
+    title              TEXT NOT NULL,
+    qty                INTEGER NOT NULL DEFAULT 0,
+    starts_at          TEXT,
+    ends_at            TEXT,
+    created_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(vendor_id, product_id),
+    FOREIGN KEY (vendor_id) REFERENCES vendors(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS work_orders (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     order_id       INTEGER NOT NULL,
@@ -169,3 +227,7 @@ CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(thread_user_id);
 CREATE INDEX IF NOT EXISTS idx_products_public ON products(is_public, archived);
 CREATE INDEX IF NOT EXISTS idx_work_orders_order ON work_orders(order_id);
+CREATE INDEX IF NOT EXISTS idx_products_vendor ON products(vendor_id);
+CREATE INDEX IF NOT EXISTS idx_vendor_products_vendor ON vendor_products(vendor_id);
+CREATE INDEX IF NOT EXISTS idx_vendor_products_match ON vendor_products(matched_product_id);
+CREATE INDEX IF NOT EXISTS idx_restock_schedules_vendor ON restock_schedules(vendor_id);

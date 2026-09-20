@@ -60,7 +60,10 @@ class Database
         self::ensureColumn('products', 'images_json', 'TEXT');
         self::ensureColumn('messages', 'to_user_id', 'INTEGER');
         self::ensureColumn('messages', 'sender_user_id', 'INTEGER');
-        self::ensureColumn('products', 'min_qty', 'INTEGER NOT NULL DEFAULT 10');
+        self::ensureColumn('products', 'min_qty', 'INTEGER NOT NULL DEFAULT 0');
+        self::ensureColumn('products', 'goal_qty', 'INTEGER NOT NULL DEFAULT 0');
+        self::ensureColumn('products', 'vendor_id', 'INTEGER');
+        self::ensureColumn('products', 'source_id', 'INTEGER');
         self::ensureColumn('products', 'spt', 'INTEGER NOT NULL DEFAULT 10');
         self::ensureColumn('products', 'warehouse_stock', 'INTEGER NOT NULL DEFAULT 0');
         self::ensureColumn('work_orders', 'notes', 'TEXT');
@@ -70,13 +73,12 @@ class Database
         self::ensureColumn('work_orders', 'ends_at', 'TEXT');
         self::ensureColumn('work_orders', 'qty_was', 'INTEGER');
         self::ensureColumn('work_orders', 'qty_changed_at', 'TEXT');
-        self::ensureColumn('bundle_items', 'sort_order', 'INTEGER NOT NULL DEFAULT 0');
         self::ensureColumn('users', 'preferred_currency', "TEXT NOT NULL DEFAULT ''");
-        self::ensureColumn('users', 'tray_rate', 'INTEGER NOT NULL DEFAULT 10');
-        self::ensureColumn('users', 'discount_percent', 'INTEGER NOT NULL DEFAULT 0');
         self::ensureColumn('orders', 'manual_discount_cents', 'INTEGER NOT NULL DEFAULT 0');
         self::ensureColumn('products', 'colours', "TEXT NOT NULL DEFAULT ''");
+        self::retireWholesaleAccounts();
         self::seedDefaults();
+        self::seedSourcesFromVendors();
     }
 
     /** Add a column to a table only if it does not already exist (SQLite-safe). */
@@ -89,6 +91,71 @@ class Database
         }
         if (!$exists) {
             $pdo->exec("ALTER TABLE {$table} ADD COLUMN {$column} {$definition}");
+        }
+    }
+
+    /** Drop a column when it exists (SQLite 3.35+). */
+    public static function dropColumn(string $table, string $column): void
+    {
+        $pdo = self::pdo();
+        $exists = false;
+        foreach ($pdo->query("PRAGMA table_info(" . $table . ")") as $col) {
+            if (($col['name'] ?? '') === $column) { $exists = true; break; }
+        }
+        if (!$exists) {
+            return;
+        }
+        try {
+            $pdo->exec("ALTER TABLE {$table} DROP COLUMN {$column}");
+        } catch (\Throwable $e) {
+            // Older SQLite cannot DROP COLUMN; leave the unused field in place.
+        }
+    }
+
+    /** Convert leftover wholesale/guest accounts and drop unused user columns. */
+    private static function retireWholesaleAccounts(): void
+    {
+        $pdo = self::pdo();
+        try {
+            $pdo->exec(
+                "UPDATE users SET role = 'staff',
+                    status = CASE WHEN status = 'pending' THEN 'disabled' ELSE status END
+                 WHERE role IN ('wholesale', 'guest')"
+            );
+            $pdo->exec("UPDATE users SET status = 'disabled' WHERE status = 'pending'");
+        } catch (\Throwable $e) {
+            // users table may not exist yet on a brand-new install before schema ran.
+        }
+        self::dropColumn('users', 'tray_rate');
+        self::dropColumn('users', 'discount_percent');
+        self::dropColumn('users', 'ignore_min_quantities');
+    }
+
+    /** One-time: copy leftover vendors into Sources when the table is empty. */
+    private static function seedSourcesFromVendors(): void
+    {
+        $pdo = self::pdo();
+        $have = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='sources'")->fetchColumn();
+        if (!$have) {
+            return;
+        }
+        $n = (int)$pdo->query('SELECT COUNT(*) FROM sources')->fetchColumn();
+        if ($n > 0) {
+            return;
+        }
+        $vendors = $pdo->query("SELECT id, name FROM vendors WHERE archived = 0")->fetchAll();
+        if (!$vendors) {
+            return;
+        }
+        $ins = $pdo->prepare(
+            'INSERT INTO sources (vendor_name, collection_id, collection_name, sync_frequency_days) VALUES (?,?,?,?)'
+        );
+        $freq = Settings::defaultSyncFrequencyDays();
+        foreach ($vendors as $v) {
+            $ins->execute([(string)$v['name'], '', (string)$v['name'], $freq]);
+            $sid = (int)$pdo->lastInsertId();
+            $pdo->prepare('UPDATE products SET source_id = ? WHERE vendor_id = ? AND (source_id IS NULL OR source_id = 0)')
+                ->execute([$sid, (int)$v['id']]);
         }
     }
 
@@ -108,7 +175,7 @@ class Database
             'wholesale_show_stock' => '0',
             'currency'            => 'AUD',
             'wholesale_percent'   => '65',
-            'product_min_qty'     => '10',
+            'product_min_qty'     => '0',
             'product_spt'         => '10',
             'im_browser_notifications' => '0',
             'admin_event_alerts'  => '0',
@@ -129,6 +196,9 @@ class Database
             'shopify_periodic_sync' => '0',
             'shopify_periodic_minutes' => '60',
             'shopify_periodic_next_at' => '0',
+            'allow_automated_sync' => '0',
+            'default_sync_frequency_days' => '1',
+            'report_urgency_colors' => '1',
             'detect_colours_on_import' => '0',
         ];
         $stmt = $pdo->prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');

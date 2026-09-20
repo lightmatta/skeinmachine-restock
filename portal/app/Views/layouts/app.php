@@ -91,7 +91,8 @@ window.__ICONS__ = {
   archive: <?= json_encode(Icons::get('archive', 15)) ?>,
   trash: <?= json_encode(Icons::get('trash', 15)) ?>,
   columns: <?= json_encode(Icons::get('columns', 16)) ?>,
-  bundle: <?= json_encode(Icons::get('bundle', 15)) ?>
+  bundle: <?= json_encode(Icons::get('bundle', 15)) ?>,
+  refresh: <?= json_encode(Icons::get('refresh', 15)) ?>
 };
 </script>
 <script src="assets/app.js?v=<?= (int)@filemtime(APP_ROOT . '/public/assets/app.js') ?>"></script>

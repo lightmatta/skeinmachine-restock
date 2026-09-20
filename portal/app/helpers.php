@@ -205,7 +205,7 @@ function cdn_image_url(string $url, int $width): string
 /** Number of lines currently in the wholesale session cart. */
 function cart_count(): int
 {
-    return \App\Controllers\WholesaleController::cartCount();
+    return 0;
 }
 
 /**

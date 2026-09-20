@@ -517,6 +517,14 @@ table.grid tr.expand-row td {
   flex-wrap: wrap; margin-bottom: 8px;
 }
 .wo-group-head h2 { margin: 0; }
+.restock-section-title { margin: 16px 0 8px; font-size: 14px; letter-spacing: .04em; text-transform: uppercase; color: var(--grey); }
+.restock-section-title.restock-unavail { color: #9b2c2c; }
+.restock-unavail-wrap { outline: 2px solid rgba(155, 44, 44, .25); border-radius: 10px; }
+.restock-unavail-row { background: #fff4f2; }
+table.grid tr.grid-group td {
+  background: var(--bg-soft); font-weight: 700; letter-spacing: .02em;
+  border-top: 1px solid var(--line);
+}
 .chat-to {
   display: flex; align-items: center; gap: 8px; padding: 8px 10px;
   border-bottom: 1px solid var(--line); flex: none; font-size: 13px;
@@ -645,3 +653,218 @@ tr.wo-tray.wo-done td {
   }
   body.gantt-print-a4 .gantt-print-chart svg { max-height: 178mm; }
 }
+
+/* ---- Vendor restock reports (portal home) ---- */
+.report-filters {
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.report-filters .field span { font-size: 12px; color: var(--grey); }
+.report-group-toggle {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  min-width: auto;
+  cursor: pointer;
+  user-select: none;
+}
+.report-group-toggle input {
+  width: auto;
+  margin: 0;
+}
+.report-group-toggle span {
+  margin: 0;
+  font-weight: 600;
+}
+.restock-reports { display: flex; flex-direction: column; gap: 18px; }
+.restock-report { padding: 18px 20px 12px; }
+.restock-report-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.restock-report-head h2 { margin: 0; font-size: 18px; }
+.report-actions { display: flex; gap: 8px; flex: none; }
+.copy-report {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+}
+.copy-report:hover { border-color: var(--hl); color: var(--hl); }
+.copy-report.is-copied { border-color: #157a3a; color: #157a3a; }
+.need-qty { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.need-qty .muted { font-weight: 400; }
+
+.restock-report .table-wrap { overflow-x: hidden; }
+.restock-report table.grid {
+  table-layout: fixed;
+  width: 100%;
+}
+.restock-report table.grid thead th {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+.restock-report table.grid th,
+.restock-report table.grid td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.restock-report .col-sku { width: 12%; }
+.restock-report .col-pid { width: 9%; }
+.restock-report .col-name { width: auto; }
+.restock-report .col-source { width: 14%; }
+.restock-report .col-inv,
+.restock-report .col-total { width: 7%; }
+.restock-report .col-qty { width: 16%; }
+.restock-report .col-inv,
+.restock-report .col-qty,
+.restock-report .col-total { text-align: right; }
+.restock-report th.col-inv,
+.restock-report th.col-qty,
+.restock-report th.col-total,
+.restock-report td.col-inv,
+.restock-report td.col-qty,
+.restock-report td.col-total {
+  text-overflow: clip;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.restock-report td.col-name {
+  position: relative;
+  cursor: pointer;
+}
+.restock-report td.col-name .name-clip {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.restock-report td.col-name.is-open { overflow: visible; z-index: 4; }
+.restock-report td.col-name.is-open .name-clip { visibility: hidden; }
+.restock-report td.col-name.is-open::after {
+  content: attr(data-full);
+  position: absolute;
+  left: 8px;
+  top: calc(100% - 4px);
+  z-index: 5;
+  min-width: 180px;
+  max-width: min(420px, 70vw);
+  padding: 8px 10px;
+  background: #fff;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.12);
+  white-space: normal;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.grid-vendor-filter span { font-size: 12px; color: var(--grey); }
+.grid-vendor-select { min-width: 200px; }
+
+.urgency-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--grey);
+  max-width: 380px;
+}
+.urg-scale {
+  display: block;
+  height: 10px;
+  width: 100%;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: linear-gradient(90deg, #fbe2e0 0%, #feead4 50%, #fbf5d4 100%);
+}
+.urg-scale-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.restock-report tbody tr.has-urgency td { background-color: var(--urg); }
+.restock-report table.grid thead th { cursor: pointer; }
+.restock-report table.grid thead th[aria-sort] { color: var(--ink); }
+.restock-report table.grid thead th.is-group-col { color: var(--ink); }
+.restock-report.is-grouped tbody tr.is-group-start td {
+  box-shadow: inset 0 2px 0 0 rgba(0,0,0,.14);
+}
+
+.copy-preview-card { width: min(640px, 100%); }
+.copy-preview-letter {
+  margin-top: 12px;
+  max-height: min(58vh, 520px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fafafa;
+  padding: 16px 18px;
+}
+.copy-preview-letter pre {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  color: var(--ink);
+}
+
+.attention-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  display: grid;
+  gap: 10px;
+}
+.attention-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border: 1.5px solid #f0c7c2;
+  background: #fdf4f2;
+  border-radius: 12px;
+}
+.attention-rank {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--hl);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  flex: none;
+}
+.attention-copy { flex: 1; min-width: 160px; }
+.attention-copy strong { display: block; }
+.report-overview-list li.is-attention,
+table.grid tbody tr.is-attention td {
+  background: #fdf4f2;
+}
+.report-overview-list li.is-attention {
+  padding: 4px 8px;
+  border-radius: 8px;
+  list-style-position: inside;
+}
+

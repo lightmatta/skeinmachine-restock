@@ -550,6 +550,9 @@
       this.hidden = new Set(opts.hidden || []);
       this.persistHidden = opts.persistHidden || null;
       this.rowActions = Array.isArray(opts.rowActions) ? opts.rowActions : [];
+      this.groupKey = opts.groupKey || null;
+      this.vendorFilter = Array.isArray(opts.vendorFilter) ? opts.vendorFilter : null;
+      this.vendorFilterValue = "";
       this.rows = [];
       this.selected = new Set();
       this.expanded = new Set();
@@ -595,15 +598,31 @@
         ? `<div class="grid-bulk-number">${this.bulkNumber
             .map((b) => {
               const min = b.min != null ? Number(b.min) : 0;
-              return `<label class="grid-bulk-number-item"><span class="grid-bulk-number-label">${hd.escape(b.label)}</span>
-                <input type="number" min="${min}" class="grid-bulk-number-input" data-bulk-num="${hd.escape(b.key)}" placeholder="0">
+              const tip = hd.escape(b.tip || b.label);
+              return `<label class="grid-bulk-number-item" title="${tip}"><span class="grid-bulk-number-label">${hd.escape(b.label)}</span>
+                <input type="number" min="${min}" class="grid-bulk-number-input" data-bulk-num="${hd.escape(b.key)}" placeholder="0" title="${tip}">
                 <button type="button" class="btn btn-sm btn-primary" data-bulk-num-apply="${hd.escape(b.key)}">Apply</button></label>`;
             })
             .join("")}</div>`
         : "";
+      const vendorHtml = this.vendorFilter
+        ? `<label class="field grid-vendor-filter" style="margin:0;min-width:200px"><span>Select by vendor name</span>
+            <select class="grid-vendor-select" aria-label="Select by vendor name">
+              <option value="">All vendors</option>
+              ${this.vendorFilter
+                .filter((o) => String(o && typeof o === "object" ? o.value : o) !== "0")
+                .map((o) => {
+                  const value = o && typeof o === "object" ? String(o.value) : String(o);
+                  const label = o && typeof o === "object" ? String(o.label ?? o.value) : String(o);
+                  return `<option value="${hd.escape(value)}">${hd.escape(label)}</option>`;
+                })
+                .join("")}
+            </select></label>`
+        : "";
       this.mount.innerHTML =
         `<div class="toolbar">
            <input type="search" placeholder="Search…" class="grid-search">
+           ${vendorHtml}
            ${bulkHtml}
            ${bulkNumHtml}
            <div class="spacer"></div>
@@ -619,6 +638,17 @@
         this.search = e.target.value.toLowerCase();
         this.paint();
       });
+      const vendorSel = this.mount.querySelector(".grid-vendor-select");
+      if (vendorSel) {
+        vendorSel.value = this.vendorFilterValue;
+        vendorSel.addEventListener("change", () => {
+          this.vendorFilterValue = vendorSel.value;
+          this.paint();
+        });
+      }
+      if (this.mount.querySelector(".grid-search") && this.entity === "vendor_products") {
+        this.mount.querySelector(".grid-search").placeholder = "Filter product names…";
+      }
       const addBtn = this.mount.querySelector(".grid-add");
       if (addBtn) addBtn.addEventListener("click", () => this.addRow());
 
@@ -678,6 +708,9 @@
           this.columns.some((c) => String(r[c.key] ?? "").toLowerCase().includes(this.search))
         );
       }
+      if (this.vendorFilterValue) {
+        rows = rows.filter((r) => String(r.vendor_id ?? "") === String(this.vendorFilterValue));
+      }
       if (this.sortKey) {
         rows.sort((a, b) => {
           const va = a[this.sortKey],
@@ -697,7 +730,8 @@
       const cols = this.visibleCols();
       const thead = this.mount.querySelector("thead");
       const tbody = this.mount.querySelector("tbody");
-      const extra = (this.readonly ? 0 : 1) + (this.selectable ? 1 : 0);
+      const hasActions = !this.readonly || (this.rowActions && this.rowActions.length > 0);
+      const extra = (hasActions ? 1 : 0) + (this.selectable ? 1 : 0);
       const checkHead = this.selectable
         ? `<th class="grid-check"><input type="checkbox" class="grid-check-all" aria-label="Select all"></th>`
         : "";
@@ -711,7 +745,7 @@
             return `<th data-key="${c.key}"${tip}>${hd.escape(c.label)}<span class="sortcaret">${caret}</span></th>`;
           })
           .join("") +
-        (this.readonly ? "" : "<th>Actions</th>") +
+        (hasActions ? "<th>Actions</th>" : "") +
         "</tr>";
       thead.querySelectorAll("th[data-key]").forEach((th) => {
         th.addEventListener("click", () => {
@@ -725,25 +759,46 @@
         });
       });
       const allCb = thead.querySelector(".grid-check-all");
+      const rows = this.filteredRows();
       if (allCb) {
-        allCb.addEventListener("click", (e) => e.stopPropagation());
-        allCb.addEventListener("change", () => {
-          const rows = this.filteredRows();
-          if (allCb.checked) rows.forEach((r) => this.selected.add(r.id));
-          else rows.forEach((r) => this.selected.delete(r.id));
+        const allOn = rows.length > 0 && rows.every((r) => this.selected.has(r.id));
+        const someOn = rows.some((r) => this.selected.has(r.id));
+        allCb.checked = allOn;
+        allCb.indeterminate = someOn && !allOn;
+        allCb.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const visible = this.filteredRows();
+          const currentlyAll = visible.length > 0 && visible.every((r) => this.selected.has(r.id));
+          visible.forEach((r) => {
+            if (currentlyAll) this.selected.delete(r.id);
+            else this.selected.add(r.id);
+          });
           this.paint();
         });
       }
 
       this.syncBulkBar();
 
-      const rows = this.filteredRows();
       if (!rows.length) {
         tbody.innerHTML = `<tr><td colspan="${cols.length + extra}" class="empty">No records.</td></tr>`;
         return;
       }
       tbody.innerHTML = "";
+      let lastGroup = null;
       rows.forEach((r) => {
+        if (this.groupKey) {
+          const g = r[this.groupKey] || "Ungrouped";
+          if (g !== lastGroup) {
+            lastGroup = g;
+            const gh = document.createElement("tr");
+            gh.className = "grid-group";
+            const gtd = document.createElement("td");
+            gtd.colSpan = cols.length + extra;
+            gtd.textContent = g;
+            gh.appendChild(gtd);
+            tbody.appendChild(gh);
+          }
+        }
         const tr = document.createElement("tr");
         if (this.expanded.has(r.id)) tr.classList.add("is-expanded");
         if (this.selectable) {
@@ -760,7 +815,10 @@
             const head = this.mount.querySelector(".grid-check-all");
             if (head) {
               const visible = this.filteredRows();
-              head.checked = visible.length > 0 && visible.every((row) => this.selected.has(row.id));
+              const allOn = visible.length > 0 && visible.every((row) => this.selected.has(row.id));
+              const someOn = visible.some((row) => this.selected.has(row.id));
+              head.checked = allOn;
+              head.indeterminate = someOn && !allOn;
             }
           });
           td.appendChild(cb);
@@ -783,7 +841,7 @@
           }
           tr.appendChild(td);
         });
-        if (!this.readonly) {
+        if (hasActions) {
           const td = document.createElement("td");
           td.className = "no-print";
           const icons = window.__ICONS__ || {};
@@ -794,17 +852,18 @@
               return `<button type="button" class="btn btn-sm btn-ghost act-custom" data-op="${hd.escape(a.op)}" title="${hd.escape(title)}">${icon || hd.escape(title)}</button>`;
             })
             .join("");
-          td.innerHTML =
-            `<span class="row-actions">
-               ${extras}
-               <button class="btn btn-sm btn-ghost act-archive" title="Archive">${icons.archive || ""}</button>
-               <button class="btn btn-sm btn-danger act-del" title="Delete">${icons.trash || ""}</button>
-             </span>`;
+          const mutate = this.readonly
+            ? ""
+            : `<button class="btn btn-sm btn-ghost act-archive" title="Archive">${icons.archive || ""}</button>
+               <button class="btn btn-sm btn-danger act-del" title="Delete">${icons.trash || ""}</button>`;
+          td.innerHTML = `<span class="row-actions">${extras}${mutate}</span>`;
           td.querySelectorAll(".act-custom").forEach((btn) => {
             btn.addEventListener("click", () => this.customAction(r, btn.dataset.op, btn.getAttribute("title")));
           });
-          td.querySelector(".act-del").addEventListener("click", () => this.deleteRow(r));
-          td.querySelector(".act-archive").addEventListener("click", () => this.archiveRow(r));
+          const del = td.querySelector(".act-del");
+          const arch = td.querySelector(".act-archive");
+          if (del) del.addEventListener("click", () => this.deleteRow(r));
+          if (arch) arch.addEventListener("click", () => this.archiveRow(r));
           tr.appendChild(td);
         }
         tbody.appendChild(tr);
@@ -849,7 +908,6 @@
         return;
       }
       hd.toast("Updated " + (data.updated || ids.length) + " products");
-      this.selected.clear();
       this.reload();
     }
 
@@ -871,6 +929,11 @@
     }
 
     formatCell(col, val, row) {
+      if (col.options && col.key === "vendor_id") {
+        const hit = (col.options || []).find((o) => String(o && typeof o === "object" ? o.value : o) === String(val ?? 0));
+        const label = hit && typeof hit === "object" ? (hit.label ?? hit.value) : (hit || row.vendor_name || "—");
+        return hd.escape(String(label || "—"));
+      }
       if (col.type === "money") return hd.money(val);
       if (col.type === "badge") return `<span class="badge ${hd.escape(String(val))}">${hd.escape(String(val))}</span>`;
       if (col.type === "bool") {
@@ -1008,6 +1071,7 @@
         return data;
       }
       hd.toast(data.message || (title || "Done"));
+      if (op === "scrape" || op === "sync") this.reload();
       return data;
     }
   }

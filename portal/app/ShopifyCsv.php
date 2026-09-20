@@ -225,11 +225,10 @@ class ShopifyCsv
         $byId = $pdo->prepare('SELECT id, shopify_product_id, colours FROM products WHERE id = ? LIMIT 1');
         $byShopify = $pdo->prepare('SELECT id, shopify_product_id, colours FROM products WHERE shopify_product_id = ? LIMIT 1');
         $bySku = $pdo->prepare("SELECT id, shopify_product_id, colours FROM products WHERE sku = ? AND sku <> '' LIMIT 1");
-        // Retail Status (status) is overwritten from the CSV. Wholesale Status
-        // (is_public) is admin-owned and kept on existing rows.
+        // Stock and catalog fields refresh. Status, vendor, min and goal stay admin-owned.
         $update = $pdo->prepare(
             "UPDATE products SET sku = ?, title = ?, description = ?, category = ?, price_cents = ?,
-                    stock = ?, image_url = ?, images_json = ?, status = ?, archived = ?,
+                    stock = ?, image_url = ?, images_json = ?, archived = ?,
                     shopify_product_id = ?, colours = ?, updated_at = datetime('now')
              WHERE id = ?"
         );
@@ -282,7 +281,7 @@ class ShopifyCsv
                     $update->execute([
                         $it['sku'], $it['title'], $it['description'], $it['category'],
                         $it['price_cents'], $it['stock'], $it['image_url'], $it['images_json'] ?? '',
-                        $it['status'], (int)$it['archived'],
+                        (int)$it['archived'],
                         $sid, $colours, (int)$existing['id'],
                     ]);
                     $updated++;

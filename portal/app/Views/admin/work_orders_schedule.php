@@ -19,15 +19,15 @@ $payload = [
   <div class="content wo-schedule-content">
     <div class="wo-schedule-toolbar no-print">
       <div class="wo-schedule-title">
-        <h1><?= Icons::get('clock', 22) ?> Schedule</h1>
-        <p class="muted">Each customer order has its own colour and a summary bar that tracks the last scheduled day. Tick an order to show it, click the name to select the whole order for a group move, and double-click a row to collapse work or trays.</p>
+        <h1><?= Icons::get('clock', 22) ?> Restock schedule</h1>
+        <p class="muted">Each vendor has its own colour. Tick a vendor to show their restock lines, click the name to select the whole vendor for a group move, and drag bars along the timescale to schedule the reorder.</p>
       </div>
       <div class="wo-schedule-dates">
         <label>Start <input type="date" id="ganttFrom" value="<?= e($from) ?>"></label>
         <label>End <input type="date" id="ganttTo" value="<?= e($to) ?>"></label>
-        <label class="gantt-override" title="Skip the resolve-conflicts offer. Over-rate work stays highlighted until the schedule is fixed.">
+        <label class="gantt-override" title="Place selected vendor restock lines on consecutive days." hidden>
           <input type="checkbox" id="ganttOverrideRate"<?= !empty($view['override_rate']) ? ' checked' : '' ?>>
-          Override tray-rate warnings
+          Override warnings
         </label>
         <?php if (!empty($isAdmin)): ?>
         <button type="button" class="btn btn-sm btn-primary" id="ganttAutoSchedule">Auto-schedule</button>

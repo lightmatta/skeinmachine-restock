@@ -5,7 +5,7 @@ declare(strict_types=1);
  * Installer / migrator.
  *
  *   php portal/bin/install.php            # create config.php (if missing) + migrate DB
- *   php portal/bin/install.php --seed     # also load demo products/bundles/users
+ *   php portal/bin/install.php --seed     # also load demo products/users
  *   php portal/bin/install.php --fresh    # delete the SQLite DB first, then migrate
  *
  * On first run this copies config.sample.php to config.php if it does not

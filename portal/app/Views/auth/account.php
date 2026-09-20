@@ -26,20 +26,6 @@ $d = $dbUser ?? [];
     </div>
     <label class="field"><span>Office address</span><textarea name="office_address" rows="2"><?= e($d['office_address'] ?? '') ?></textarea></label>
     <label class="field"><span>Delivery address</span><textarea name="delivery_address" rows="2"><?= e($d['delivery_address'] ?? '') ?></textarea></label>
-    <?php if (\App\Auth::isWholesale()):
-      $home = \App\Settings::currency();
-      $pref = strtoupper(trim((string)($d['preferred_currency'] ?? '')));
-    ?>
-    <label class="field"><span>Display currency</span>
-      <select name="preferred_currency">
-        <option value="" <?= $pref === '' ? 'selected' : '' ?>>Same as <?= e($home) ?> (transaction currency)</option>
-        <?php foreach (\App\Currency::codes() as $code => $name): ?>
-          <option value="<?= e($code) ?>" <?= $pref === $code ? 'selected' : '' ?>><?= e($code) ?> — <?= e($name) ?></option>
-        <?php endforeach; ?>
-      </select>
-    </label>
-    <p class="help">Orders are billed in <strong><?= e($home) ?></strong>. If you choose a different display currency, we show an estimated conversion on totals as a convenience. Exchange rates may vary at the time of payment.</p>
-    <?php endif; ?>
     <label class="field"><span>New password (leave blank to keep current)</span><input type="password" name="password" minlength="8"></label>
     <button class="btn btn-primary" type="submit"><?= Icons::get('check', 18) ?> Save changes</button>
   </form>
