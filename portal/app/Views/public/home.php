@@ -61,7 +61,7 @@ $urgencyOn = RestockOrders::urgencyColorsEnabled();
         $label = (string)($g['label'] ?? $g['vendor_name']);
         $pdfHref = url('report.pdf', ['vendor' => (string)$g['vendor_name']]);
       ?>
-      <article class="card restock-report" data-vendor="<?= e($vendorKey) ?>" data-label="<?= e(strtolower($label)) ?>">
+      <article class="card restock-report" data-vendor="<?= e($vendorKey) ?>" data-label="<?= e(strtolower($label)) ?>" data-sort="stock" data-dir="asc">
         <div class="restock-report-head">
           <div>
             <h2><?= e($label) ?></h2>
@@ -81,12 +81,12 @@ $urgencyOn = RestockOrders::urgencyColorsEnabled();
           <table class="grid">
             <thead>
               <tr>
-                <th class="col-sku">SKU</th>
-                <th class="col-pid">ProductID</th>
-                <th class="col-name">Product Name</th>
-                <th class="col-inv" title="Current Inventory Stock Level">Inv</th>
-                <th class="col-qty">Order Quantity</th>
-                <th class="col-total" title="Inv + Order Quantity">Total</th>
+                <th class="col-sku" data-sort="sku">SKU<span class="sortcaret"></span></th>
+                <th class="col-pid" data-sort="pid">ProductID<span class="sortcaret"></span></th>
+                <th class="col-name" data-sort="title">Product Name<span class="sortcaret"></span></th>
+                <th class="col-inv" data-sort="stock" title="Current Inventory Stock Level">Inv<span class="sortcaret"></span></th>
+                <th class="col-qty" data-sort="need">Order Quantity<span class="sortcaret"></span></th>
+                <th class="col-total" data-sort="total" title="Inv + Order Quantity">Total<span class="sortcaret"></span></th>
               </tr>
             </thead>
             <tbody>
@@ -107,7 +107,9 @@ $urgencyOn = RestockOrders::urgencyColorsEnabled();
                   data-title="<?= e((string)$line['title']) ?>"
                   data-need="<?= (int)$line['need_qty'] ?>"
                   data-goal="<?= (int)$line['goal_qty'] ?>"
-                  data-stock="<?= (int)$line['stock'] ?>">
+                  data-stock="<?= (int)$line['stock'] ?>"
+                  data-total="<?= (int)$line['stock'] + (int)$line['need_qty'] ?>"
+                  data-id="<?= (int)($line['catalog_id'] ?? 0) ?>">
                 <td class="col-sku"><?= e($skuShow) ?></td>
                 <td class="col-pid"><?= e($pidShow) ?></td>
                 <td class="col-name" title="<?= e((string)$line['title']) ?>" data-full="<?= e((string)$line['title']) ?>" tabindex="0">
@@ -153,6 +155,61 @@ page_script(<<<'JS'
     return Array.prototype.filter.call(card.querySelectorAll('tbody tr[data-search]'), function(tr){ return !tr.hidden; });
   }
 
+  function sortValue(tr, key){
+    if (key === 'stock' || key === 'need' || key === 'total' || key === 'pid') {
+      var raw = tr.getAttribute(key === 'pid' ? 'data-pid' : ('data-' + key)) || '';
+      var n = parseFloat(raw);
+      return isNaN(n) ? 0 : n;
+    }
+    if (key === 'sku') return (tr.getAttribute('data-sku') || '').toLowerCase();
+    return (tr.getAttribute('data-title') || '').toLowerCase();
+  }
+
+  function sortCard(card, key, dir){
+    var tbody = card.querySelector('tbody');
+    if (!tbody) return;
+    var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr[data-search]'));
+    var mul = dir === 'desc' ? -1 : 1;
+    rows.sort(function(a, b){
+      var va = sortValue(a, key);
+      var vb = sortValue(b, key);
+      var cmp;
+      if (typeof va === 'number' && typeof vb === 'number') cmp = va - vb;
+      else cmp = String(va).localeCompare(String(vb));
+      if (cmp === 0) cmp = Number(a.getAttribute('data-id') || 0) - Number(b.getAttribute('data-id') || 0);
+      return cmp * mul;
+    });
+    rows.forEach(function(tr){ tbody.appendChild(tr); });
+    card.setAttribute('data-sort', key);
+    card.setAttribute('data-dir', dir);
+    card.querySelectorAll('thead th[data-sort]').forEach(function(th){
+      var k = th.getAttribute('data-sort');
+      var caret = th.querySelector('.sortcaret');
+      if (k === key) {
+        th.setAttribute('aria-sort', dir === 'desc' ? 'descending' : 'ascending');
+        if (caret) caret.textContent = dir === 'desc' ? ' ▼' : ' ▲';
+      } else {
+        th.removeAttribute('aria-sort');
+        if (caret) caret.textContent = '';
+      }
+    });
+    updatePdfHref(card);
+  }
+
+  function updatePdfHref(card){
+    var pdf = card.querySelector('.pdf-report');
+    if (!pdf) return;
+    var vendor = card.getAttribute('data-vendor') || '';
+    var href = 'index.php?r=' + encodeURIComponent('report.pdf') + '&vendor=' + encodeURIComponent(vendor);
+    var q = ((kwInp && kwInp.value) || '').trim();
+    if (q) href += '&q=' + encodeURIComponent(q);
+    href += '&sort=' + encodeURIComponent(card.getAttribute('data-sort') || 'stock');
+    href += '&dir=' + encodeURIComponent(card.getAttribute('data-dir') || 'asc');
+    var order = visibleRows(card).map(function(tr){ return tr.getAttribute('data-id') || ''; }).filter(Boolean).join(',');
+    if (order) href += '&order=' + encodeURIComponent(order);
+    pdf.setAttribute('href', href);
+  }
+
   function apply(){
     var vn = ((vendorInp && vendorInp.value) || '').trim().toLowerCase();
     var q = ((kwInp && kwInp.value) || '').trim().toLowerCase();
@@ -172,13 +229,7 @@ page_script(<<<'JS'
       var show = vendorOk && visible > 0;
       card.hidden = !show;
       if (show) { shown++; lines += visible; }
-      var pdf = card.querySelector('.pdf-report');
-      if (pdf) {
-        var vendor = card.getAttribute('data-vendor') || '';
-        var href = 'index.php?r=' + encodeURIComponent('report.pdf') + '&vendor=' + encodeURIComponent(vendor);
-        if (q) href += '&q=' + encodeURIComponent(q);
-        pdf.setAttribute('href', href);
-      }
+      updatePdfHref(card);
     });
     if (info) {
       info.textContent = (vn || q) ? (shown + ' vendor' + (shown===1?'':'s') + ' · ' + lines + ' item' + (lines===1?'':'s')) : '';
@@ -253,9 +304,29 @@ page_script(<<<'JS'
   });
   document.addEventListener('click', function(){ closeNames(); });
 
+  cards.forEach(function(card){
+    card.querySelectorAll('thead th[data-sort]').forEach(function(th){
+      th.addEventListener('click', function(){
+        var key = th.getAttribute('data-sort') || 'stock';
+        var cur = card.getAttribute('data-sort') || 'stock';
+        var dir = card.getAttribute('data-dir') || 'asc';
+        if (key === cur) dir = dir === 'asc' ? 'desc' : 'asc';
+        else dir = 'asc';
+        sortCard(card, key, dir);
+      });
+    });
+    var pdf = card.querySelector('.pdf-report');
+    if (pdf) {
+      pdf.addEventListener('click', function(){ updatePdfHref(card); });
+    }
+  });
+
   if (vendorInp) vendorInp.addEventListener('input', apply);
   if (kwInp) kwInp.addEventListener('input', apply);
   apply();
+  cards.forEach(function(card){
+    sortCard(card, card.getAttribute('data-sort') || 'stock', card.getAttribute('data-dir') || 'asc');
+  });
 
   function showCopyPreview(text, copied){
     var modal = document.getElementById('copyPreviewModal');

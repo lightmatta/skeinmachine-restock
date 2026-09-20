@@ -33,6 +33,16 @@ class PublicController
         if (!$report) {
             abort(404, 'Report not found.');
         }
+        $order = trim((string)($_GET['order'] ?? ''));
+        if ($order !== '') {
+            $report['lines'] = RestockOrders::orderLines($report['lines'], $order);
+        } else {
+            $report['lines'] = RestockOrders::sortLines(
+                $report['lines'],
+                (string)($_GET['sort'] ?? 'stock'),
+                (string)($_GET['dir'] ?? 'asc')
+            );
+        }
         $pdf = RestockOrders::reportPdf($report);
         $name = RestockOrders::reportFilename($report);
         header('Content-Type: application/pdf');

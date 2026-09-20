@@ -99,6 +99,16 @@ $adelaide = $repByName['Adelaide Notions'] ?? null;
 expect($adelaide !== null, 'Adelaide Notions groups both collections into one report');
 expect(($adelaide['label'] ?? '') === 'Adelaide Notions / Bowls, Markers', 'Adelaide collections are alphabetical in the label');
 expect(count($adelaide['collections'] ?? []) === 2, 'Adelaide report lists both collections');
+$hdStocks = array_map('intval', array_column($repByName['House Dye Wholesale']['lines'], 'stock'));
+$hdSorted = $hdStocks;
+sort($hdSorted, SORT_NUMERIC);
+expect($hdStocks === $hdSorted, 'Report lines default to Inv lowest to highest');
+$byTitle = App\RestockOrders::sortLines($repByName['House Dye Wholesale']['lines'], 'title', 'asc');
+expect(isset($byTitle[0], $byTitle[1]) && strcasecmp((string)$byTitle[0]['title'], (string)$byTitle[1]['title']) <= 0, 'Report lines can be sorted by product name');
+$adeIds = array_map('intval', array_column($adelaide['lines'], 'catalog_id'));
+$revIds = array_reverse($adeIds);
+$reordered = App\RestockOrders::orderLines($adelaide['lines'], implode(',', $revIds));
+expect(array_map('intval', array_column($reordered, 'catalog_id')) === $revIds, 'PDF/text order can follow the table row order');
 $text = App\RestockOrders::reportText($repByName['House Dye Wholesale']);
 expect(str_contains($text, 'Restock Request Form'), 'Copy text is labelled Restock Request Form');
 expect(str_contains($text, 'House Dye Wholesale / Yarn Collection'), 'Copy text names vendor / collection');
@@ -210,7 +220,9 @@ expect(str_contains($homeSrc, '>Total<') || str_contains($homeSrc, 'Inv + Order 
 expect(str_contains($homeSrc, 'col-name'), 'Product name uses a truncating column');
 expect(str_contains($homeSrc, 'td.col-name'), 'Full product name popover is bound to name cells, not the header');
 expect(str_contains($homeSrc, 'copyPreviewModal'), 'Copy as text opens a preview');
-expect(str_contains($homeSrc, 'has-urgency') || str_contains($homeSrc, '--urg'), 'Report rows take a blended urgency colour');
+expect(str_contains($homeSrc, 'function sortCard'), 'Reports sort when a column header is clicked');
+expect(str_contains($homeSrc, 'data-sort="stock"'), 'Inv is the default sort column');
+expect(str_contains($homeSrc, '&order='), 'PDF link includes the visible row order');
 expect(!str_contains($homeSrc, 'Desired Goal'), 'Old goal-minus-stock column title is gone');
 
 $cssSrc = file_get_contents($root . '/public/assets/app.css');

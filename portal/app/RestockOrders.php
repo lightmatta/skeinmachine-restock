@@ -297,6 +297,7 @@ class RestockOrders
             natcasesort($g['collections']);
             $g['collections'] = array_values($g['collections']);
             $g['label'] = Sources::displayLabel((string)$g['vendor_name'], $g['collections']);
+            $g['lines'] = self::sortLines($g['lines'], 'stock', 'asc');
         }
         unset($g);
         return array_values($groups);
@@ -331,6 +332,72 @@ class RestockOrders
         return null;
     }
 
+    /**
+     * Sort report lines. Default is Inv (stock) lowest to highest.
+     *
+     * @param list<array<string,mixed>> $lines
+     * @return list<array<string,mixed>>
+     */
+    public static function sortLines(array $lines, string $key = 'stock', string $dir = 'asc'): array
+    {
+        $dirMul = strtolower($dir) === 'desc' ? -1 : 1;
+        $key = match ($key) {
+            'pid', 'product_id' => 'product_id',
+            'need', 'need_qty', 'qty' => 'need_qty',
+            'name', 'title' => 'title',
+            'total' => 'total',
+            'sku' => 'sku',
+            'inv', 'stock' => 'stock',
+            default => 'stock',
+        };
+        usort($lines, static function (array $a, array $b) use ($key, $dirMul): int {
+            if ($key === 'total') {
+                $cmp = (((int)($a['stock'] ?? 0) + (int)($a['need_qty'] ?? 0))
+                    <=> ((int)($b['stock'] ?? 0) + (int)($b['need_qty'] ?? 0)));
+            } elseif ($key === 'stock' || $key === 'need_qty') {
+                $cmp = ((int)($a[$key] ?? 0)) <=> ((int)($b[$key] ?? 0));
+            } else {
+                $cmp = strcasecmp((string)($a[$key] ?? ''), (string)($b[$key] ?? ''));
+            }
+            if ($cmp === 0) {
+                $cmp = ((int)($a['catalog_id'] ?? 0)) <=> ((int)($b['catalog_id'] ?? 0));
+            }
+            return $cmp * $dirMul;
+        });
+        return array_values($lines);
+    }
+
+    /**
+     * Reorder lines to match a comma-separated catalog id list (table row order).
+     *
+     * @param list<array<string,mixed>> $lines
+     * @return list<array<string,mixed>>
+     */
+    public static function orderLines(array $lines, string $order): array
+    {
+        $ids = [];
+        foreach (explode(',', $order) as $part) {
+            $id = (int)trim($part);
+            if ($id > 0) {
+                $ids[] = $id;
+            }
+        }
+        if (!$ids) {
+            return $lines;
+        }
+        $byId = [];
+        foreach ($lines as $line) {
+            $byId[(int)($line['catalog_id'] ?? 0)] = $line;
+        }
+        $out = [];
+        foreach ($ids as $id) {
+            if (isset($byId[$id])) {
+                $out[] = $byId[$id];
+            }
+        }
+        return $out;
+    }
+
     /** SKU / product ID shown on copy and PDF when the catalog value is missing. */
     public static function displayCode(mixed $value): string
     {
@@ -341,12 +408,12 @@ class RestockOrders
         return $v;
     }
 
-    /** Pastel red at 0 inventory. */
-    public const URGENCY_RED = '#f7c4c0';
-    /** Pastel orange at 50% of Min. */
-    public const URGENCY_ORANGE = '#fcd4a8';
-    /** Pastel yellow at Min (and above). */
-    public const URGENCY_YELLOW = '#f6eaa8';
+    /** Pastel red at 0 inventory (50% toward white). */
+    public const URGENCY_RED = '#fbe2e0';
+    /** Pastel orange at 50% of Min (50% toward white). */
+    public const URGENCY_ORANGE = '#feead4';
+    /** Pastel yellow at Min and above (50% toward white). */
+    public const URGENCY_YELLOW = '#fbf5d4';
 
     /**
      * Continuous pastel shade for inventory as a fraction of Min:

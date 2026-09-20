@@ -774,7 +774,7 @@ tr.wo-tray.wo-done td {
   width: 100%;
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: linear-gradient(90deg, #f7c4c0 0%, #fcd4a8 50%, #f6eaa8 100%);
+  background: linear-gradient(90deg, #fbe2e0 0%, #feead4 50%, #fbf5d4 100%);
 }
 .urg-scale-labels {
   display: flex;
@@ -782,6 +782,8 @@ tr.wo-tray.wo-done td {
   gap: 8px;
 }
 .restock-report tbody tr.has-urgency td { background-color: var(--urg); }
+.restock-report table.grid thead th { cursor: pointer; }
+.restock-report table.grid thead th[aria-sort] { color: var(--ink); }
 
 .copy-preview-card { width: min(640px, 100%); }
 .copy-preview-letter {
