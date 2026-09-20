@@ -2,9 +2,9 @@
 declare(strict_types=1);
 
 /**
- * Run (or skip) a Periodic Sync stock pull.
+ * Run (or skip) an automated Sources sync tick, or the legacy periodic stock pull.
  *
- *   php bin/shopify-periodic-sync.php           # honour checkbox + interval
+ *   php bin/shopify-periodic-sync.php           # honour Allow automated sync / leftover interval
  *   php bin/shopify-periodic-sync.php --force   # pull now even if waiting/off
  */
 

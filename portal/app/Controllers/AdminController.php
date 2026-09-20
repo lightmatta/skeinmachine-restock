@@ -13,6 +13,7 @@ use App\View;
 use App\WorkOrders;
 use App\Vendors;
 use App\RestockOrders;
+use App\Sources;
 use App\Nlp\QueryEngine;
 use PDO;
 
@@ -40,6 +41,11 @@ class AdminController
             'editable' => ['vendor_id', 'vendor_product_id', 'sku', 'title', 'price_cents', 'stock', 'status', 'source_url', 'matched_product_id', 'archived'],
             'archivable' => true,
         ],
+        'sources' => [
+            'table' => 'sources',
+            'editable' => ['vendor_name', 'collection_id', 'collection_name', 'sync_frequency_days', 'archived'],
+            'archivable' => true,
+        ],
         'users' => [
             'table' => 'users',
             'editable' => ['email', 'role', 'status', 'first_name', 'last_name',
@@ -64,6 +70,7 @@ class AdminController
             View::render('admin/staff_dashboard', [
                 'title' => 'Dashboard', 'active' => 'dashboard',
                 'assigned' => $assigned, 'open' => $pending,
+                'reports' => RestockOrders::goalReports(),
             ]);
             return;
         }
@@ -78,18 +85,22 @@ class AdminController
 
         $activity = $pdo->query('SELECT * FROM activity ORDER BY created_at DESC LIMIT 20')->fetchAll();
 
-        $restock = RestockOrders::stats();
+        $reports = RestockOrders::goalReports();
+        $belowGoal = 0;
+        foreach ($reports as $g) {
+            $belowGoal += count($g['lines'] ?? []);
+        }
         $stats = [
-            'vendors' => (int)$pdo->query('SELECT COUNT(*) FROM vendors WHERE archived = 0')->fetchColumn(),
-            'below_min' => $restock['below_min'],
-            'fulfillable' => $restock['fulfillable'],
-            'unfulfillable' => $restock['unfulfillable'],
+            'sources' => (int)$pdo->query('SELECT COUNT(*) FROM sources WHERE archived = 0')->fetchColumn(),
+            'products' => (int)$pdo->query("SELECT COUNT(*) FROM products WHERE archived = 0")->fetchColumn(),
+            'below_goal' => $belowGoal,
+            'vendors' => (int)$pdo->query('SELECT COUNT(DISTINCT vendor_name) FROM sources WHERE archived = 0')->fetchColumn(),
         ];
 
         View::render('admin/dashboard', [
             'title' => 'Admin', 'active' => 'dashboard',
             'unread' => $unread, 'activity' => $activity, 'stats' => $stats,
-            'restockGroups' => RestockOrders::grouped(),
+            'reports' => $reports,
         ]);
     }
 
@@ -143,6 +154,16 @@ class AdminController
                 UserPrefs::GRID_PRODUCTS,
                 ['description', 'shopify_product_id']
             ),
+        ]);
+    }
+
+    public static function sources(): void
+    {
+        Auth::requireStaffOrAdmin();
+        View::render('admin/sources', [
+            'title' => 'Sources', 'active' => 'sources',
+            'readonly' => Auth::isStaff(),
+            'hiddenCols' => UserPrefs::hiddenColumns(Auth::id(), UserPrefs::GRID_SOURCES, []),
         ]);
     }
 
@@ -213,7 +234,7 @@ class AdminController
             if (!csrf_check()) redirect('admin/settings');
             $keys = ['company_name', 'highlight_color', 'logo_url', 'contact_email',
                      'contact_phone', 'opening_hours', 'fy_start_month',
-                     'shopify_domain', 'shopify_client_id', 'shopify_api_version', 'shopify_collection_id'];
+                     'shopify_domain', 'shopify_client_id', 'shopify_api_version'];
             $prevClientId = (string)Settings::get('shopify_client_id', '');
             $prevDomain = (string)Settings::get('shopify_domain', '');
             foreach ($keys as $k) {
@@ -233,18 +254,8 @@ class AdminController
                 \App\ShopifyService::forgetCachedToken();
             }
             // Wholesale, notifications, front-page HTML, and colour-detect are retired.
-            $prevPeriodic = Settings::get('shopify_periodic_sync', '0');
-            $prevMins = Settings::get('shopify_periodic_minutes', '60');
-            Settings::set('shopify_periodic_sync', isset($_POST['shopify_periodic_sync']) ? '1' : '0');
-            if (array_key_exists('shopify_periodic_minutes', $_POST)) {
-                $mins = (int)$_POST['shopify_periodic_minutes'];
-                Settings::set('shopify_periodic_minutes', (string)max(1, min(24 * 60, $mins ?: 60)));
-            }
-            $newPeriodic = Settings::get('shopify_periodic_sync', '0');
-            $newMins = Settings::get('shopify_periodic_minutes', '60');
-            if ($newPeriodic !== $prevPeriodic || $newMins !== $prevMins) {
-                \App\ShopifyService::schedulePeriodicFromNow();
-            }
+            Settings::set('allow_automated_sync', isset($_POST['allow_automated_sync']) ? '1' : '0');
+            Sources::rescheduleAll();
             if (array_key_exists('currency', $_POST)) {
                 Settings::set('currency', \App\Currency::normalize((string)$_POST['currency']));
             }
@@ -313,8 +324,7 @@ class AdminController
         if (Auth::isStaff()) {
             $allowed = [
                 'products' => ['list'],
-                'vendors' => ['list'],
-                'vendor_products' => ['list'],
+                'sources' => ['list', 'sync'],
             ];
             if (!isset($allowed[$entity]) || !in_array($op, $allowed[$entity], true)) {
                 json_response(['error' => 'forbidden', 'message' => 'Staff accounts have read-only catalog access.'], 403);
@@ -328,6 +338,10 @@ class AdminController
         if ($entity === 'user_action') { self::userActionApi($op, $body); }
         if ($entity === 'shopify') { self::shopifyApi($op, $body); }
         if ($entity === 'settings') { self::settingsApi($op, $body); }
+        if ($entity === 'sources' && $op === 'sync') {
+            $result = Sources::syncNow((int)($body['id'] ?? 0));
+            json_response($result, ($result['ok'] ?? false) ? 200 : 400);
+        }
 
         if (!isset(self::SCHEMA[$entity])) {
             json_response(['error' => 'unknown_entity'], 400);
@@ -391,6 +405,10 @@ class AdminController
                 }
                 if ($entity === 'vendor_products') {
                     Vendors::updateProduct($id, $changes);
+                    json_response(['ok' => true]);
+                }
+                if ($entity === 'sources') {
+                    Sources::update($id, $changes);
                     json_response(['ok' => true]);
                 }
                 if ($entity === 'products' && array_key_exists('min_qty', $changes)) {
@@ -541,6 +559,10 @@ class AdminController
                     Vendors::delete($id);
                     json_response(['ok' => true]);
                 }
+                if ($entity === 'sources') {
+                    Sources::delete($id);
+                    json_response(['ok' => true]);
+                }
                 $pdo->prepare("DELETE FROM {$schema['table']} WHERE id = ?")->execute([$id]);
                 json_response(['ok' => true]);
                 break;
@@ -628,6 +650,9 @@ class AdminController
         if ($entity === 'vendor_products') {
             return Vendors::products($filters);
         }
+        if ($entity === 'sources') {
+            return Sources::all(!empty($filters['include_archived']));
+        }
         if ($entity === 'users') {
             return $pdo->query(
                 "SELECT id, email, role, status, first_name, last_name, phone, company_website,
@@ -649,6 +674,8 @@ class AdminController
             return Vendors::create();
         } elseif ($entity === 'vendor_products') {
             return Vendors::createProduct();
+        } elseif ($entity === 'sources') {
+            return Sources::create();
         } elseif ($entity === 'users') {
             $email = 'user' . time() . '@example.com';
             $pdo->prepare("INSERT INTO users (email, role, status) VALUES (?, 'staff', 'active')")->execute([$email]);

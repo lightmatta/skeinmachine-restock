@@ -226,13 +226,29 @@ class ShopifyService
         return ['ok' => true, 'shop' => $shop];
     }
 
-    /** Fetch and normalise products from the configured collection. */
-    public static function fetchCollectionProducts(): array
+    /** Collection title from Shopify, or empty when the collection cannot be read. */
+    public static function fetchCollectionTitle(string $collectionId): string
+    {
+        $collectionId = trim($collectionId);
+        if ($collectionId === '') {
+            return '';
+        }
+        [$status, $body] = self::get('collections/' . rawurlencode($collectionId) . '.json');
+        if ($status !== 200) {
+            return '';
+        }
+        $data = json_decode($body, true);
+        return trim((string)($data['collection']['title'] ?? ''));
+    }
+
+    /** Fetch and normalise products from a collection (or the settings default). */
+    public static function fetchCollectionProducts(?string $collectionId = null): array
     {
         $c = self::config();
+        $cid = trim((string)($collectionId ?? $c['collection_id']));
         $path = 'products.json?limit=250';
-        if ($c['collection_id'] !== '') {
-            $path .= '&collection_id=' . urlencode($c['collection_id']);
+        if ($cid !== '') {
+            $path .= '&collection_id=' . urlencode($cid);
         }
         [$status, $body] = self::get($path);
         if ($status !== 200) {
@@ -292,7 +308,7 @@ class ShopifyService
      * active/inactive status on existing rows stay under admin control.
      * Returns ['created' => n, 'updated' => n].
      */
-    public static function upsertProducts(array $items): array
+    public static function upsertProducts(array $items, ?int $sourceId = null, ?int $vendorId = null): array
     {
         $pdo = Database::pdo();
         $created = 0; $updated = 0;
@@ -301,13 +317,15 @@ class ShopifyService
         $update = $pdo->prepare(
             "UPDATE products SET title = ?, description = ?, category = ?, sku = ?,
                     price_cents = ?, stock = ?, image_url = ?, images_json = ?,
+                    source_id = COALESCE(?, source_id), vendor_id = COALESCE(?, vendor_id),
                     updated_at = datetime('now')
              WHERE id = ?"
         );
         $insert = $pdo->prepare(
             "INSERT INTO products (sku, title, description, category, price_cents, stock, image_url, images_json,
-                                   is_public, status, shopify_product_id, min_qty, goal_qty, spt, warehouse_stock, colours)
-             VALUES (?,?,?,?,?,?,?,?,1,?,?,0,0,?,0,?)"
+                                   is_public, status, shopify_product_id, min_qty, goal_qty, spt, warehouse_stock, colours,
+                                   source_id, vendor_id)
+             VALUES (?,?,?,?,?,?,?,?,1,?,?,0,0,?,0,?,?,?)"
         );
         $defaultSpt = Settings::productSpt();
 
@@ -324,7 +342,8 @@ class ShopifyService
                 $update->execute([
                     $it['title'], $it['description'], $it['category'], $it['sku'],
                     $it['price_cents'], $it['stock'],
-                    $it['image_url'], $it['images_json'] ?? '', (int)$existing['id'],
+                    $it['image_url'], $it['images_json'] ?? '',
+                    $sourceId, $vendorId, (int)$existing['id'],
                 ]);
                 $updated++;
             } else {
@@ -332,7 +351,7 @@ class ShopifyService
                     $it['sku'], $it['title'], $it['description'], $it['category'],
                     $it['price_cents'], $it['stock'], $it['image_url'], $it['images_json'] ?? '',
                     $it['status'] ?? 'active', $it['shopify_product_id'],
-                    $defaultSpt, $colours,
+                    $defaultSpt, $colours, $sourceId, $vendorId,
                 ]);
                 $created++;
             }
@@ -420,6 +439,24 @@ class ShopifyService
      */
     public static function tickPeriodic(bool $force = false): array
     {
+        if (Sources::automatedEnabled()) {
+            $lock = (int)Settings::get('shopify_periodic_lock', '0');
+            if (!$force && $lock > time() - 120) {
+                return ['ok' => true, 'ran' => false, 'reason' => 'locked'];
+            }
+            Settings::set('shopify_periodic_lock', (string)time());
+            try {
+                $result = Sources::tickDue($force);
+            } catch (\Throwable $e) {
+                $result = ['ok' => false, 'error' => $e->getMessage(), 'ran' => false];
+            } finally {
+                Settings::set('shopify_periodic_lock', '0');
+            }
+            if (!isset($result['ran'])) {
+                $result['ran'] = (bool)($result['ok'] ?? false);
+            }
+            return $result;
+        }
         if (!self::periodicEnabled() && !$force) {
             return ['ok' => true, 'ran' => false, 'reason' => 'off'];
         }

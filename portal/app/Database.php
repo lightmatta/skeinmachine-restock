@@ -63,6 +63,7 @@ class Database
         self::ensureColumn('products', 'min_qty', 'INTEGER NOT NULL DEFAULT 0');
         self::ensureColumn('products', 'goal_qty', 'INTEGER NOT NULL DEFAULT 0');
         self::ensureColumn('products', 'vendor_id', 'INTEGER');
+        self::ensureColumn('products', 'source_id', 'INTEGER');
         self::ensureColumn('products', 'spt', 'INTEGER NOT NULL DEFAULT 10');
         self::ensureColumn('products', 'warehouse_stock', 'INTEGER NOT NULL DEFAULT 0');
         self::ensureColumn('work_orders', 'notes', 'TEXT');
@@ -77,6 +78,7 @@ class Database
         self::ensureColumn('products', 'colours', "TEXT NOT NULL DEFAULT ''");
         self::retireWholesaleAccounts();
         self::seedDefaults();
+        self::seedSourcesFromVendors();
     }
 
     /** Add a column to a table only if it does not already exist (SQLite-safe). */
@@ -129,6 +131,33 @@ class Database
         self::dropColumn('users', 'ignore_min_quantities');
     }
 
+    /** One-time: copy leftover vendors into Sources when the table is empty. */
+    private static function seedSourcesFromVendors(): void
+    {
+        $pdo = self::pdo();
+        $have = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name='sources'")->fetchColumn();
+        if (!$have) {
+            return;
+        }
+        $n = (int)$pdo->query('SELECT COUNT(*) FROM sources')->fetchColumn();
+        if ($n > 0) {
+            return;
+        }
+        $vendors = $pdo->query("SELECT id, name FROM vendors WHERE archived = 0")->fetchAll();
+        if (!$vendors) {
+            return;
+        }
+        $ins = $pdo->prepare(
+            'INSERT INTO sources (vendor_name, collection_id, collection_name, sync_frequency_days) VALUES (?,?,?,7)'
+        );
+        foreach ($vendors as $v) {
+            $ins->execute([(string)$v['name'], '', (string)$v['name']]);
+            $sid = (int)$pdo->lastInsertId();
+            $pdo->prepare('UPDATE products SET source_id = ? WHERE vendor_id = ? AND (source_id IS NULL OR source_id = 0)')
+                ->execute([$sid, (int)$v['id']]);
+        }
+    }
+
     private static function seedDefaults(): void
     {
         $pdo = self::pdo();
@@ -166,6 +195,7 @@ class Database
             'shopify_periodic_sync' => '0',
             'shopify_periodic_minutes' => '60',
             'shopify_periodic_next_at' => '0',
+            'allow_automated_sync' => '0',
             'detect_colours_on_import' => '0',
         ];
         $stmt = $pdo->prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');

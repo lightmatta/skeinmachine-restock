@@ -22,8 +22,8 @@ $company = Settings::get('company_name', '');
   <?php else: ?>
     <div class="page-head">
       <div>
-        <h1><?= Icons::get('clipboard', 22) ?> Vendor restock reports</h1>
-        <p class="muted">Items whose current stock is below Goal, grouped by vendor. Copy a report to paste into a restock email.</p>
+        <h1><?= Icons::get('clipboard', 22) ?> Reports</h1>
+        <p class="muted">Items whose current stock is below Goal, grouped by vendor. Copy or print a Restock Request Form for each vendor.</p>
       </div>
     </div>
 
@@ -47,16 +47,23 @@ $company = Settings::get('company_name', '');
       <?php foreach ($reports as $g):
         $copy = RestockOrders::reportText($g);
         $vendorKey = strtolower((string)$g['vendor_name']);
+        $label = (string)($g['label'] ?? $g['vendor_name']);
+        $pdfHref = url('report.pdf', ['vendor' => (string)$g['vendor_name']]);
       ?>
-      <article class="card restock-report" data-vendor="<?= e($vendorKey) ?>">
+      <article class="card restock-report" data-vendor="<?= e($vendorKey) ?>" data-label="<?= e(strtolower($label)) ?>">
         <div class="restock-report-head">
           <div>
-            <h2><?= e((string)$g['vendor_name']) ?></h2>
+            <h2><?= e($label) ?></h2>
             <?php if (!empty($g['vendor_code'])): ?><p class="muted" style="margin:2px 0 0"><?= e((string)$g['vendor_code']) ?></p><?php endif; ?>
           </div>
-          <button type="button" class="copy-report" title="Copy as text" aria-label="Copy as text">
-            <?= Icons::get('copy', 18) ?>
-          </button>
+          <div class="report-actions">
+            <button type="button" class="copy-report" title="Copy as text" aria-label="Copy as text">
+              <?= Icons::get('copy', 18) ?>
+            </button>
+            <a class="copy-report pdf-report" href="<?= e($pdfHref) ?>" title="Download Restock Request Form PDF" aria-label="Download Restock Request Form PDF" target="_blank" rel="noopener">
+              <?= Icons::get('pdf', 18) ?>
+            </a>
+          </div>
         </div>
         <pre class="report-copy-src" hidden><?= e($copy) ?></pre>
         <div class="table-wrap">
@@ -66,7 +73,8 @@ $company = Settings::get('company_name', '');
                 <th>SKU</th>
                 <th>ProductID</th>
                 <th>Product Name</th>
-                <th>Desired Goal Stock level - existing stock level</th>
+                <th title="Current Inventory Stock Level">Inv</th>
+                <th>Order Quantity</th>
               </tr>
             </thead>
             <tbody>
@@ -83,9 +91,8 @@ $company = Settings::get('company_name', '');
                 <td><?= e((string)$line['sku'] !== '' ? (string)$line['sku'] : '—') ?></td>
                 <td><?= e((string)$line['product_id']) ?></td>
                 <td><?= e((string)$line['title']) ?></td>
-                <td class="need-qty"><?= (int)$line['need_qty'] ?>
-                  <span class="muted">(<?= (int)$line['goal_qty'] ?> − <?= (int)$line['stock'] ?>)</span>
-                </td>
+                <td class="need-qty" title="Current Inventory Stock Level"><?= (int)$line['stock'] ?></td>
+                <td class="need-qty"><?= (int)$line['need_qty'] ?></td>
               </tr>
               <?php endforeach; ?>
             </tbody>
@@ -117,7 +124,8 @@ page_script(<<<'JS'
     var lines = 0;
     cards.forEach(function(card){
       var name = (card.getAttribute('data-vendor') || '');
-      var vendorOk = !vn || name.indexOf(vn) !== -1;
+      var label = (card.getAttribute('data-label') || '');
+      var vendorOk = !vn || name.indexOf(vn) !== -1 || label.indexOf(vn) !== -1;
       var visible = 0;
       card.querySelectorAll('tbody tr[data-search]').forEach(function(tr){
         var hay = (tr.getAttribute('data-search') || '');
@@ -128,6 +136,13 @@ page_script(<<<'JS'
       var show = vendorOk && visible > 0;
       card.hidden = !show;
       if (show) { shown++; lines += visible; }
+      var pdf = card.querySelector('.pdf-report');
+      if (pdf) {
+        var vendor = card.getAttribute('data-vendor') || '';
+        var href = 'index.php?r=' + encodeURIComponent('report.pdf') + '&vendor=' + encodeURIComponent(vendor);
+        if (q) href += '&q=' + encodeURIComponent(q);
+        pdf.setAttribute('href', href);
+      }
     });
     if (info) {
       info.textContent = (vn || q) ? (shown + ' vendor' + (shown===1?'':'s') + ' · ' + lines + ' item' + (lines===1?'':'s')) : '';
@@ -137,7 +152,7 @@ page_script(<<<'JS'
 
   function reportText(card){
     var titleEl = card.querySelector('h2');
-    var vendor = titleEl ? titleEl.textContent.trim() : 'Vendor';
+    var label = titleEl ? titleEl.textContent.trim() : 'Vendor';
     var codeEl = card.querySelector('.restock-report-head .muted');
     var code = codeEl ? codeEl.textContent.trim() : '';
     var rows = visibleRows(card);
@@ -154,24 +169,23 @@ page_script(<<<'JS'
         stock: Number(tr.getAttribute('data-stock') || 0)
       };
     });
-    var header = 'Restock request — ' + vendor + (code ? ' (' + code + ')' : '');
     var n = items.length;
-    var out = [
-      header,
-      'Date: ' + new Date().toLocaleDateString(undefined, {day:'numeric', month:'long', year:'numeric'}),
-      n + ' item' + (n===1?'':'s') + ' · ' + total + ' unit' + (total===1?'':'s') + ' to order',
-      '================================================',
-      '',
-      'Hello,',
-      '',
-      'Please supply the following so we can bring on-hand stock up to our goal levels:',
-      ''
-    ];
+    var out = ['Restock Request Form', label];
+    if (code) out.push('Vendor code: ' + code);
+    out.push('Date: ' + new Date().toLocaleDateString(undefined, {day:'numeric', month:'long', year:'numeric'}));
+    out.push(n + ' item' + (n===1?'':'s') + ' · ' + total + ' unit' + (total===1?'':'s') + ' to order');
+    out.push('================================================');
+    out.push('');
+    out.push('Hello,');
+    out.push('');
+    out.push('Please supply the following so we can bring on-hand stock up to our goal levels:');
+    out.push('');
     items.forEach(function(it, i){
       out.push((i+1) + '. ' + it.title);
       out.push('   SKU: ' + (it.sku !== '' ? it.sku : '—'));
       out.push('   Product ID: ' + it.pid);
-      out.push('   Quantity to order: ' + it.need + '  (goal ' + it.goal + ' − current ' + it.stock + ')');
+      out.push('   Current inventory: ' + it.stock);
+      out.push('   Order quantity: ' + it.need + '  (goal ' + it.goal + ' − current ' + it.stock + ')');
       out.push('');
     });
     out.push('Thank you.');
@@ -180,8 +194,10 @@ page_script(<<<'JS'
 
   if (vendorInp) vendorInp.addEventListener('input', apply);
   if (kwInp) kwInp.addEventListener('input', apply);
+  apply();
 
   document.querySelectorAll('.copy-report').forEach(function(btn){
+    if (btn.classList.contains('pdf-report')) return;
     btn.addEventListener('click', async function(){
       var card = btn.closest('.restock-report');
       if (!card) return;

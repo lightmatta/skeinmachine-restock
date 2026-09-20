@@ -35,6 +35,24 @@ if ($vcount === 0) {
     $vstmt->execute(['AN-01', 'Adelaide Notions', "https://adelaidenotions.example/collections/bowls\nhttps://adelaidenotions.example/collections/markers", 'Accessories supplier. Each collection URL is scraped in turn.']);
 }
 
+// --- Sources (Shopify collection feeds) ----------------------------------
+$scount = (int)$pdo->query('SELECT COUNT(*) FROM sources')->fetchColumn();
+if ($scount === 0) {
+    $sins = $pdo->prepare(
+        'INSERT INTO sources (vendor_name, collection_id, collection_name, sync_frequency_days, last_sync_at) VALUES (?,?,?,?,?)'
+    );
+    $synced = date('Y-m-d H:i:s', strtotime('-2 days') ?: time());
+    $sins->execute(['House Dye Wholesale', '1001001', 'Yarn Collection', 7, $synced]);
+    $sins->execute(['Fleurieu Yarn Co', '2002002', 'Sock Yarns', 3, $synced]);
+    $sins->execute(['Adelaide Notions', '3003001', 'Bowls', 14, $synced]);
+    $sins->execute(['Adelaide Notions', '3003002', 'Markers', 14, $synced]);
+}
+
+$sourceIds = [];
+foreach ($pdo->query('SELECT id, vendor_name, collection_name FROM sources') as $s) {
+    $sourceIds[$s['vendor_name'] . '|' . $s['collection_name']] = (int)$s['id'];
+}
+
 // --- Products (guard on empty table) -------------------------------------
 $count = (int)$pdo->query('SELECT COUNT(*) FROM products')->fetchColumn();
 if ($count === 0) {
@@ -45,19 +63,23 @@ if ($count === 0) {
     $hd = $vendorIds['HD-WS'] ?? null;
     $fy = $vendorIds['FY-01'] ?? null;
     $an = $vendorIds['AN-01'] ?? null;
-    // sku, title, description, category, price, stock, vendor, min, goal
+    $hdSrc = $sourceIds['House Dye Wholesale|Yarn Collection'] ?? null;
+    $fySrc = $sourceIds['Fleurieu Yarn Co|Sock Yarns'] ?? null;
+    $anBowls = $sourceIds['Adelaide Notions|Bowls'] ?? null;
+    $anMark = $sourceIds['Adelaide Notions|Markers'] ?? null;
+    // sku, title, description, category, price, stock, vendor, source, min, goal
     $products = [
-        ['YRN-MERINO-01', 'Merino Sock — Coral Reef', 'Superwash merino/nylon fingering, 100g / 425m. Hand-dyed coral speckle.', 'Fingering', 2400, 4, $hd, 12, 36],
-        ['YRN-MERINO-02', 'Merino Sock — Deep Ocean', 'Superwash merino/nylon fingering, tonal deep blue.', 'Fingering', 2400, 20, $hd, 10, 30],
-        ['YRN-DK-01', 'Alpaca DK — Sunset', 'Baby alpaca DK, 100g / 220m, warm sunset gradient.', 'DK', 2800, 0, $hd, 8, 24],
-        ['YRN-WORSTED-01', 'Corriedale Worsted — Forest', 'Rustic worsted, 100g / 180m, mossy greens.', 'Worsted', 2600, 5, $fy, 10, 20],
-        ['YRN-LACE-01', 'Silk Lace — Pearl', 'Mulberry silk lace, 50g / 400m, subtle sheen.', 'Lace', 3200, 2, $fy, 6, 18],
-        ['ACC-3DP-01', '3D-Printed Yarn Bowl', 'Biodegradable PLA yarn bowl with feed slot.', 'Accessories', 1800, 15, $an, 8, 20],
-        ['ACC-3DP-02', '3D-Printed Shawl Pin', 'Geometric shawl pin, matte finish.', 'Accessories', 900, 3, $an, 10, 25],
-        ['ACC-3DP-03', '3D-Printed Swift Spare Arms (set)', 'Replacement arms for tabletop swifts.', 'Accessories', 1500, 0, $an, 5, 12],
-        ['ACC-NOTIONS-01', 'Stitch Marker Set', 'Set of 20 coral resin stitch markers.', 'Notions', 700, 40, $an, 20, 80],
+        ['YRN-MERINO-01', 'Merino Sock — Coral Reef', 'Superwash merino/nylon fingering, 100g / 425m. Hand-dyed coral speckle.', 'Fingering', 2400, 4, $hd, $hdSrc, 12, 36],
+        ['YRN-MERINO-02', 'Merino Sock — Deep Ocean', 'Superwash merino/nylon fingering, tonal deep blue.', 'Fingering', 2400, 20, $hd, $hdSrc, 10, 30],
+        ['YRN-DK-01', 'Alpaca DK — Sunset', 'Baby alpaca DK, 100g / 220m, warm sunset gradient.', 'DK', 2800, 0, $hd, $hdSrc, 8, 24],
+        ['YRN-WORSTED-01', 'Corriedale Worsted — Forest', 'Rustic worsted, 100g / 180m, mossy greens.', 'Worsted', 2600, 5, $fy, $fySrc, 10, 20],
+        ['YRN-LACE-01', 'Silk Lace — Pearl', 'Mulberry silk lace, 50g / 400m, subtle sheen.', 'Lace', 3200, 2, $fy, $fySrc, 6, 18],
+        ['ACC-3DP-01', '3D-Printed Yarn Bowl', 'Biodegradable PLA yarn bowl with feed slot.', 'Accessories', 1800, 15, $an, $anBowls, 8, 20],
+        ['ACC-3DP-02', '3D-Printed Shawl Pin', 'Geometric shawl pin, matte finish.', 'Accessories', 900, 3, $an, $anBowls, 10, 25],
+        ['ACC-3DP-03', '3D-Printed Swift Spare Arms (set)', 'Replacement arms for tabletop swifts.', 'Accessories', 1500, 0, $an, $anBowls, 5, 12],
+        ['ACC-NOTIONS-01', 'Stitch Marker Set', 'Set of 20 coral resin stitch markers.', 'Notions', 700, 40, $an, $anMark, 20, 80],
     ];
-    $pstmt = $pdo->prepare('INSERT INTO products (sku,title,description,category,price_cents,stock,is_public,vendor_id,min_qty,goal_qty,status) VALUES (?,?,?,?,?,?,1,?,?,?,\'active\')');
+    $pstmt = $pdo->prepare('INSERT INTO products (sku,title,description,category,price_cents,stock,is_public,vendor_id,source_id,min_qty,goal_qty,status) VALUES (?,?,?,?,?,?,1,?,?,?,?,\'active\')');
     foreach ($products as $p) {
         $pstmt->execute($p);
     }

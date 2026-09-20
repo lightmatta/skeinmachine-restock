@@ -14,9 +14,10 @@ class UserPrefs
     public const GRID_USERS = 'grid.hidden.users';
     public const GRID_VENDORS = 'grid.hidden.vendors';
     public const GRID_VENDOR_PRODUCTS = 'grid.hidden.vendor_products';
+    public const GRID_SOURCES = 'grid.hidden.sources';
     public const GANTT_VIEW = 'gantt.schedule.view';
-    public const GRID_KEYS = [self::GRID_PRODUCTS, self::GRID_ORDERS, self::GRID_USERS, self::GRID_VENDORS, self::GRID_VENDOR_PRODUCTS];
-    public const PREF_KEYS = [self::GRID_PRODUCTS, self::GRID_ORDERS, self::GRID_USERS, self::GRID_VENDORS, self::GRID_VENDOR_PRODUCTS, self::GANTT_VIEW];
+    public const GRID_KEYS = [self::GRID_PRODUCTS, self::GRID_ORDERS, self::GRID_USERS, self::GRID_VENDORS, self::GRID_VENDOR_PRODUCTS, self::GRID_SOURCES];
+    public const PREF_KEYS = [self::GRID_PRODUCTS, self::GRID_ORDERS, self::GRID_USERS, self::GRID_VENDORS, self::GRID_VENDOR_PRODUCTS, self::GRID_SOURCES, self::GANTT_VIEW];
 
     /**
      * @param mixed $value

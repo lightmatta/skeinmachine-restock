@@ -41,26 +41,21 @@ $s = fn(string $k, string $d = '') => e($settings[$k] ?? $d);
 
       <div class="card" style="margin-bottom:16px">
         <h2><?= Icons::get('store', 18) ?> Shopify sync</h2>
-        <p class="help">Pull products from a Shopify <strong>collection</strong> into the Products table. Save first, then use <strong>Refresh / Sync now</strong>. Vendor, Min, Goal and Status on existing products are kept; stock, title, SKU and price refresh from Shopify.</p>
+        <p class="help">Credentials used by every <strong>Sources</strong> row. Each source has its own Collection ID and <strong>Sync now</strong> action. Vendor, Min, Goal and Status on existing products are kept; stock, title, SKU and price refresh from Shopify.</p>
         <p class="help">Newer Shopify Dev Dashboard apps no longer provide a copyable Admin API access token. Enter the app <strong>Client ID</strong> and <strong>Client secret</strong> plus the store domain. The portal requests and renews the Admin API token itself using Shopify’s client-credentials grant.</p>
         <div class="form-grid">
           <label class="field"><span>Store domain</span><input name="shopify_domain" value="<?= $s('shopify_domain') ?>" placeholder="your-shop.myshopify.com" autocomplete="off"></label>
           <label class="field"><span>Client ID (API key)</span><input name="shopify_client_id" value="<?= $s('shopify_client_id') ?>" placeholder="From Dev Dashboard → Settings → Credentials" autocomplete="off"></label>
           <label class="field"><span>Client secret (API secret)</span><input type="password" name="shopify_client_secret" placeholder="<?= ($settings['shopify_client_secret'] ?? '') !== '' ? '•••••••• (set — leave blank to keep)' : 'From Dev Dashboard → Settings → Credentials' ?>" autocomplete="new-password"></label>
           <label class="field"><span>API version</span><input name="shopify_api_version" value="<?= $s('shopify_api_version', '2024-10') ?>" placeholder="2024-10"></label>
-          <label class="field"><span>Collection ID</span><input name="shopify_collection_id" value="<?= $s('shopify_collection_id') ?>" placeholder="e.g. 123456789"></label>
         </div>
         <label class="field" style="display:flex;gap:8px;align-items:center;margin-top:12px">
-          <input type="checkbox" name="shopify_periodic_sync" value="1" style="width:auto" <?= ($settings['shopify_periodic_sync'] ?? '0') === '1' ? 'checked' : '' ?>>
-          <span style="margin:0">Periodic Sync</span>
+          <input type="checkbox" name="allow_automated_sync" value="1" style="width:auto" <?= ($settings['allow_automated_sync'] ?? '0') === '1' ? 'checked' : '' ?>>
+          <span style="margin:0">Allow automated sync schedules</span>
         </label>
-        <label class="field" style="max-width:220px"><span>Sync interval (minutes)</span>
-          <input type="number" name="shopify_periodic_minutes" min="1" max="1440" value="<?= e((string)($settings['shopify_periodic_minutes'] ?? '60')) ?>">
-        </label>
-        <p class="help" style="margin-top:-4px">When Periodic Sync is on, the portal pulls stock levels from the collection above on this interval and updates the Products grid. Saving restarts the clock from now.</p>
+        <p class="help" style="margin-top:-4px">When this is on, each source syncs on its own frequency (in days). Sources due on the same day are spread evenly across 24 hours so the server is not hit with every collection at once.</p>
         <div class="toolbar" style="margin:4px 0 0">
           <button type="button" class="btn btn-sm" id="shopifyTest"><?= Icons::get('link', 16) ?> Test connection</button>
-          <button type="button" class="btn btn-sm btn-primary" id="shopifySync"><?= Icons::get('refresh', 16) ?> Refresh / Sync now</button>
           <span id="shopifyResult" class="help"></span>
         </div>
         <?php if (!empty($settings['shopify_last_sync'])): ?>
@@ -96,17 +91,10 @@ $s = fn(string $k, string $d = '') => e($settings[$k] ?? $d);
   function ok(msg){ res.textContent = msg; res.style.color = '#157a3a'; }
   function err(msg){ res.textContent = msg; res.style.color = '#b3261e'; }
   var testBtn = document.getElementById('shopifyTest');
-  var syncBtn = document.getElementById('shopifySync');
   if (testBtn) testBtn.addEventListener('click', async function(){
     busy('Testing connection…');
     var r = await hd.post('admin/api', {entity:'shopify', op:'test'});
     if (r.ok) ok('Connected to ' + (r.shop || 'store') + '.'); else err(r.error || 'Connection failed.');
-  });
-  if (syncBtn) syncBtn.addEventListener('click', async function(){
-    busy('Syncing products from Shopify…');
-    var r = await hd.post('admin/api', {entity:'shopify', op:'sync'});
-    if (r.ok) ok('Synced: ' + r.fetched + ' fetched, ' + r.created + ' created, ' + r.updated + ' updated.');
-    else err(r.error || 'Sync failed.');
   });
   var csvBtn = document.getElementById('shopifyCsvImport');
   var csvFile = document.getElementById('shopifyCsvFile');

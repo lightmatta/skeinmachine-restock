@@ -52,67 +52,66 @@ use App\Auth;
 use App\Database;
 use App\Settings;
 use App\ShopifyService;
+use App\Sources;
 use App\UserPrefs;
 use App\View;
 
 $pdo = Database::pdo();
 
 /* ----- defaults + settings UI ----- */
-if (Settings::get('shopify_periodic_sync', '0') !== '0') {
-    fail('Periodic Sync should default off');
-}
-if (Settings::get('shopify_periodic_minutes', '60') !== '60') {
-    fail('Periodic Sync interval should default to 60 minutes');
+if (Settings::get('allow_automated_sync', '0') !== '0') {
+    fail('Allow automated sync schedules should default off');
 }
 $setUi = View::capture('admin/settings', ['active' => 'settings', 'settings' => Settings::all(), 'saved' => false]);
-if (!str_contains($setUi, 'Periodic Sync') || !str_contains($setUi, 'name="shopify_periodic_sync"')) {
-    fail('settings missing Periodic Sync checkbox');
-}
-if (!str_contains($setUi, 'name="shopify_periodic_minutes"') || !str_contains($setUi, 'Sync interval (minutes)')) {
-    fail('settings missing interval-in-minutes field');
+if (!str_contains($setUi, 'Allow automated sync schedules') || !str_contains($setUi, 'name="allow_automated_sync"')) {
+    fail('settings missing Allow automated sync schedules checkbox');
 }
 $adminSrc = file_get_contents(APP_ROOT . '/app/Controllers/AdminController.php');
-if (!str_contains($adminSrc, 'shopify_periodic_sync') || !str_contains($adminSrc, 'schedulePeriodicFromNow')) {
-    fail('settings save should persist Periodic Sync and restart the interval clock');
+if (!str_contains($adminSrc, 'allow_automated_sync') || !str_contains($adminSrc, 'rescheduleAll')) {
+    fail('settings save should persist automated sync and reschedule Sources');
 }
 $alertsSrc = file_get_contents(APP_ROOT . '/app/Controllers/MessageController.php');
 if (!str_contains($alertsSrc, 'tickPeriodic')) {
-    fail('chat.alerts should tick Periodic Sync so the portal can pull stock without cron');
+    fail('chat.alerts should tick automated source sync so the portal can pull stock without cron');
 }
 $cli = file_get_contents(APP_ROOT . '/bin/shopify-periodic-sync.php');
 if ($cli === false || !str_contains($cli, 'tickPeriodic')) {
     fail('CLI periodic sync helper is missing');
 }
-pass('Periodic Sync defaults to off / 60 minutes and is exposed in Settings');
+pass('Automated source sync defaults to off and is exposed in Settings');
 
 /* ----- schedule + skip while waiting ----- */
-Settings::set('shopify_periodic_sync', '1');
-Settings::set('shopify_periodic_minutes', '60');
-ShopifyService::schedulePeriodicFromNow();
-$next = (int)Settings::get('shopify_periodic_next_at', '0');
-if ($next < time() + 55 * 60 || $next > time() + 65 * 60) {
-    fail('saving Periodic Sync should schedule ~60 minutes from now, got ' . $next);
-}
-$tick = ShopifyService::tickPeriodic();
-if (($tick['ran'] ?? true) !== false || ($tick['reason'] ?? '') !== 'waiting') {
-    fail('tick should wait until the interval elapses, got ' . json_encode($tick));
-}
-Settings::set('shopify_periodic_minutes', '10');
-ShopifyService::schedulePeriodicFromNow();
-$next10 = (int)Settings::get('shopify_periodic_next_at', '0');
-if ($next10 < time() + 8 * 60 || $next10 > time() + 12 * 60) {
-    fail('changing the interval should restart the clock from now (~10 min), got ' . $next10);
-}
-Settings::set('shopify_periodic_sync', '0');
-ShopifyService::schedulePeriodicFromNow();
-if (Settings::get('shopify_periodic_next_at', '1') !== '0') {
-    fail('turning Periodic Sync off should clear the next-run time');
-}
+Settings::set('allow_automated_sync', '0');
+Sources::rescheduleAll();
 $off = ShopifyService::tickPeriodic();
 if (($off['reason'] ?? '') !== 'off') {
-    fail('tick should no-op when the checkbox is off, got ' . json_encode($off));
+    fail('tick should no-op when automated sync is off, got ' . json_encode($off));
 }
-pass('interval clock restarts on save and stops when Periodic Sync is off');
+$pdo->exec("INSERT INTO sources (vendor_name, collection_id, collection_name, sync_frequency_days, last_sync_at)
+            VALUES ('Demo Mill', '555', 'Yarns', 7, datetime('now', '-8 days'))");
+$sid = (int)$pdo->lastInsertId();
+Settings::set('allow_automated_sync', '1');
+Sources::rescheduleAll();
+$next = $pdo->query('SELECT next_sync_at FROM sources WHERE id = ' . $sid)->fetchColumn();
+if (!$next) {
+    fail('enabling automated sync should assign next_sync_at');
+}
+$times = Sources::spreadTimes(date('Y-m-d'), 4);
+if ($times !== [
+    date('Y-m-d') . ' 03:00:00',
+    date('Y-m-d') . ' 09:00:00',
+    date('Y-m-d') . ' 15:00:00',
+    date('Y-m-d') . ' 21:00:00',
+]) {
+    fail('spreadTimes should space 4 jobs evenly, got ' . json_encode($times));
+}
+Settings::set('allow_automated_sync', '0');
+Sources::rescheduleAll();
+$cleared = $pdo->query('SELECT next_sync_at FROM sources WHERE id = ' . $sid)->fetchColumn();
+if ($cleared !== null && $cleared !== '') {
+    fail('turning automated sync off should clear next_sync_at');
+}
+pass('automated schedule spreads same-day syncs and clears when the checkbox is off');
 
 /* ----- stock-only pull updates matching products ----- */
 $pdo->exec("INSERT INTO products (sku, title, description, price_cents, stock, shopify_product_id, status, is_public)
@@ -238,9 +237,6 @@ if (!str_contains($js, 'notifyPrompt') || !str_contains($layout, 'id="notifyProm
 }
 if (!str_contains($js, 'armPermissionOnGesture') || !str_contains($js, 'requestNotifyPermission')) {
     fail('notification permission must be requested from a user gesture for mobile browsers');
-}
-if (!str_contains($setUi, 'notification shade') && !str_contains($setUi, 'system notification')) {
-    fail('settings help should mention phone system notifications');
 }
 pass('IM and admin-event alerts use the service worker so phones show system notifications');
 

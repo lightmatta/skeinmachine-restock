@@ -15,9 +15,31 @@ class PublicController
     {
         $signedIn = Auth::isStaffOrAdmin();
         View::render('public/home', [
-            'title' => $signedIn ? 'Vendor restock reports' : Settings::get('company_name', 'Welcome'),
+            'title' => $signedIn ? 'Reports' : Settings::get('company_name', 'Welcome'),
             'signedIn' => $signedIn,
             'reports' => $signedIn ? RestockOrders::goalReports() : [],
         ]);
+    }
+
+    /** Professionally formatted Restock Request Form PDF for one vendor group. */
+    public static function reportPdf(): void
+    {
+        if (!Auth::isStaffOrAdmin()) {
+            redirect('login');
+        }
+        $vendor = (string)($_GET['vendor'] ?? '');
+        $q = (string)($_GET['q'] ?? '');
+        $report = RestockOrders::findReport($vendor, $q);
+        if (!$report) {
+            abort(404, 'Report not found.');
+        }
+        $pdf = RestockOrders::reportPdf($report);
+        $name = RestockOrders::reportFilename($report);
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: inline; filename="' . $name . '"');
+        header('Cache-Control: private, max-age=0, must-revalidate');
+        header('Content-Length: ' . (string)strlen($pdf));
+        echo $pdf;
+        exit;
     }
 }

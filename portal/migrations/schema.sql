@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS products (
     min_qty      INTEGER NOT NULL DEFAULT 0,        -- restock minimum (admin-editable; triggers Restock Orders)
     goal_qty     INTEGER NOT NULL DEFAULT 0,        -- goal stock level used to recommend reorder qty
     vendor_id    INTEGER,                           -- preferred supplier for restock
+    source_id    INTEGER,                           -- sources.id this product was synced from
     spt          INTEGER NOT NULL DEFAULT 10,       -- retained for existing installs; hidden from products grid
     warehouse_stock INTEGER NOT NULL DEFAULT 0,     -- retained for existing installs; hidden from products grid
     colours      TEXT NOT NULL DEFAULT '',          -- retained for existing installs; hidden from products grid
@@ -105,6 +106,19 @@ CREATE TABLE IF NOT EXISTS messages (
     sender_user_id   INTEGER,                        -- the user who sent it (null for system)
     created_at       TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (thread_user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS sources (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    vendor_name          TEXT NOT NULL,
+    collection_id        TEXT NOT NULL DEFAULT '',
+    collection_name      TEXT NOT NULL DEFAULT '',
+    sync_frequency_days  INTEGER NOT NULL DEFAULT 7,
+    last_sync_at         TEXT,
+    next_sync_at         TEXT,
+    archived             INTEGER NOT NULL DEFAULT 0,
+    created_at           TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at           TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS vendors (

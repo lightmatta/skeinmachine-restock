@@ -26,6 +26,7 @@ try {
     switch ($route) {
         // ---- Public ----------------------------------------------------
         case 'home':            PublicController::home(); break;
+        case 'report.pdf':      PublicController::reportPdf(); break;
         case 'page':
         case 'search':
         case 'product':
@@ -66,16 +67,19 @@ try {
         // ---- Admin -----------------------------------------------------
         case 'admin':           AdminController::dashboard(); break;
         case 'admin/users':     AdminController::users(); break;
-        case 'admin/orders':
-        case 'admin/vendors':   AdminController::vendors(); break;
-        case 'admin/vendor-products': AdminController::vendorProducts(); break;
         case 'admin/products':  AdminController::products(); break;
+        case 'admin/sources':   AdminController::sources(); break;
         case 'admin/bundles':   redirect('admin/products'); break;
         case 'admin/messages':  AdminController::messages(); break;
+        case 'admin/orders':
+        case 'admin/vendors':
+        case 'admin/vendor-products':
         case 'admin/work-orders':
-        case 'admin/restock-orders': AdminController::workOrders(); break;
+        case 'admin/restock-orders':
         case 'admin/work-orders/schedule':
-        case 'admin/restock-orders/schedule': AdminController::workOrdersSchedule(); break;
+        case 'admin/restock-orders/schedule':
+            redirect('admin');
+            break;
         case 'admin/analytics': AdminController::analytics(); break;
         case 'admin/settings':  AdminController::settings(); break;
         case 'admin/shopify-csv': AdminController::shopifyCsv(); break;

@@ -2,7 +2,7 @@
 /**
  * Universal portal header.
  *
- * Brand, centred Home link, and account controls are identical on the restock
+ * Brand, centred Reports link, and account controls are identical on the restock
  * portal, the admin back office, and error pages.
  */
 
@@ -19,14 +19,12 @@ $isStaff = Auth::isStaff();
 $route = (string)($_GET['r'] ?? 'home');
 
 $navItems = [
-    ['Home', url('home'), $route === 'home'],
+    ['Reports', url('home'), $route === 'home' || $route === 'report.pdf'],
 ];
 
 $accountLinks = [];
 if ($isStaff) {
     $accountLinks[] = ['admin', 'grid', 'Dashboard'];
-    $accountLinks[] = ['admin/work-orders', 'clipboard', 'Restock orders'];
-    $accountLinks[] = ['admin/work-orders/schedule', 'clock', 'Schedule'];
 }
 if ($isAdmin) {
     $accountLinks[] = ['admin', 'grid', 'Admin dashboard'];

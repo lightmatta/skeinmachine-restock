@@ -672,6 +672,7 @@ tr.wo-tray.wo-done td {
   margin-bottom: 12px;
 }
 .restock-report-head h2 { margin: 0; font-size: 18px; }
+.report-actions { display: flex; gap: 8px; flex: none; }
 .copy-report {
   flex: none;
   width: 38px;

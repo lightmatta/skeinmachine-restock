@@ -702,7 +702,8 @@
       const cols = this.visibleCols();
       const thead = this.mount.querySelector("thead");
       const tbody = this.mount.querySelector("tbody");
-      const extra = (this.readonly ? 0 : 1) + (this.selectable ? 1 : 0);
+      const hasActions = !this.readonly || (this.rowActions && this.rowActions.length > 0);
+      const extra = (hasActions ? 1 : 0) + (this.selectable ? 1 : 0);
       const checkHead = this.selectable
         ? `<th class="grid-check"><input type="checkbox" class="grid-check-all" aria-label="Select all"></th>`
         : "";
@@ -716,7 +717,7 @@
             return `<th data-key="${c.key}"${tip}>${hd.escape(c.label)}<span class="sortcaret">${caret}</span></th>`;
           })
           .join("") +
-        (this.readonly ? "" : "<th>Actions</th>") +
+        (hasActions ? "<th>Actions</th>" : "") +
         "</tr>";
       thead.querySelectorAll("th[data-key]").forEach((th) => {
         th.addEventListener("click", () => {
@@ -802,7 +803,7 @@
           }
           tr.appendChild(td);
         });
-        if (!this.readonly) {
+        if (hasActions) {
           const td = document.createElement("td");
           td.className = "no-print";
           const icons = window.__ICONS__ || {};
@@ -813,17 +814,18 @@
               return `<button type="button" class="btn btn-sm btn-ghost act-custom" data-op="${hd.escape(a.op)}" title="${hd.escape(title)}">${icon || hd.escape(title)}</button>`;
             })
             .join("");
-          td.innerHTML =
-            `<span class="row-actions">
-               ${extras}
-               <button class="btn btn-sm btn-ghost act-archive" title="Archive">${icons.archive || ""}</button>
-               <button class="btn btn-sm btn-danger act-del" title="Delete">${icons.trash || ""}</button>
-             </span>`;
+          const mutate = this.readonly
+            ? ""
+            : `<button class="btn btn-sm btn-ghost act-archive" title="Archive">${icons.archive || ""}</button>
+               <button class="btn btn-sm btn-danger act-del" title="Delete">${icons.trash || ""}</button>`;
+          td.innerHTML = `<span class="row-actions">${extras}${mutate}</span>`;
           td.querySelectorAll(".act-custom").forEach((btn) => {
             btn.addEventListener("click", () => this.customAction(r, btn.dataset.op, btn.getAttribute("title")));
           });
-          td.querySelector(".act-del").addEventListener("click", () => this.deleteRow(r));
-          td.querySelector(".act-archive").addEventListener("click", () => this.archiveRow(r));
+          const del = td.querySelector(".act-del");
+          const arch = td.querySelector(".act-archive");
+          if (del) del.addEventListener("click", () => this.deleteRow(r));
+          if (arch) arch.addEventListener("click", () => this.archiveRow(r));
           tr.appendChild(td);
         }
         tbody.appendChild(tr);
@@ -1032,7 +1034,7 @@
         return data;
       }
       hd.toast(data.message || (title || "Done"));
-      if (op === "scrape") this.reload();
+      if (op === "scrape" || op === "sync") this.reload();
       return data;
     }
   }

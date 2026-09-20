@@ -243,34 +243,42 @@ class RestockOrders
     {
         $pdo = Database::pdo();
         $products = $pdo->query(
-            "SELECT p.id, p.sku, p.title, p.stock, p.goal_qty, p.vendor_id, p.shopify_product_id,
-                    v.name AS vendor_name, v.vendor_id AS vendor_code
+            "SELECT p.id, p.sku, p.title, p.stock, p.goal_qty, p.vendor_id, p.shopify_product_id, p.source_id,
+                    COALESCE(NULLIF(s.vendor_name, ''), NULLIF(v.name, ''), 'Unassigned') AS vendor_name,
+                    COALESCE(NULLIF(s.collection_name, ''), NULLIF(s.collection_id, ''), '') AS collection_name,
+                    v.vendor_id AS vendor_code
              FROM products p
+             LEFT JOIN sources s ON s.id = p.source_id
              LEFT JOIN vendors v ON v.id = p.vendor_id
              WHERE p.archived = 0 AND p.status = 'active' AND p.goal_qty > p.stock
-             ORDER BY COALESCE(NULLIF(v.name, ''), 'Unassigned') COLLATE NOCASE, p.title COLLATE NOCASE"
+             ORDER BY vendor_name COLLATE NOCASE, collection_name COLLATE NOCASE, p.title COLLATE NOCASE"
         )->fetchAll();
 
         $groups = [];
         foreach ($products as $p) {
-            $vendorId = (int)($p['vendor_id'] ?? 0);
             $vendorName = trim((string)($p['vendor_name'] ?? ''));
             if ($vendorName === '') {
                 $vendorName = 'Unassigned';
             }
+            $collection = trim((string)($p['collection_name'] ?? ''));
             $shopifyId = trim((string)($p['shopify_product_id'] ?? ''));
             $productId = $shopifyId !== '' ? $shopifyId : (string)(int)$p['id'];
             $stock = (int)$p['stock'];
             $goal = (int)$p['goal_qty'];
             $need = max(0, $goal - $stock);
-            $key = $vendorId > 0 ? $vendorId : 0;
+            $key = strtolower($vendorName);
             if (!isset($groups[$key])) {
                 $groups[$key] = [
-                    'vendor_id' => $vendorId,
+                    'vendor_id' => (int)($p['vendor_id'] ?? 0),
                     'vendor_name' => $vendorName,
                     'vendor_code' => (string)($p['vendor_code'] ?? ''),
+                    'collections' => [],
+                    'label' => $vendorName,
                     'lines' => [],
                 ];
+            }
+            if ($collection !== '' && !in_array($collection, $groups[$key]['collections'], true)) {
+                $groups[$key]['collections'][] = $collection;
             }
             $groups[$key]['lines'][] = [
                 'sku' => (string)($p['sku'] ?? ''),
@@ -280,9 +288,45 @@ class RestockOrders
                 'stock' => $stock,
                 'goal_qty' => $goal,
                 'need_qty' => $need,
+                'collection_name' => $collection,
             ];
         }
+        foreach ($groups as &$g) {
+            natcasesort($g['collections']);
+            $g['collections'] = array_values($g['collections']);
+            $g['label'] = Sources::displayLabel((string)$g['vendor_name'], $g['collections']);
+        }
+        unset($g);
         return array_values($groups);
+    }
+
+    /**
+     * Filter a vendor group and its lines by keyword (SKU / id / title).
+     *
+     * @return array<string,mixed>|null
+     */
+    public static function findReport(string $vendor, string $keyword = ''): ?array
+    {
+        $want = strtolower(trim($vendor));
+        $q = strtolower(trim($keyword));
+        foreach (self::goalReports() as $g) {
+            $name = strtolower((string)$g['vendor_name']);
+            $label = strtolower((string)$g['label']);
+            if ($want !== '' && $name !== $want && !str_contains($name, $want) && !str_contains($label, $want)) {
+                continue;
+            }
+            if ($q !== '') {
+                $g['lines'] = array_values(array_filter($g['lines'], static function (array $line) use ($q): bool {
+                    $hay = strtolower(trim(($line['sku'] ?? '') . ' ' . ($line['product_id'] ?? '') . ' ' . ($line['title'] ?? '')));
+                    return str_contains($hay, $q);
+                }));
+            }
+            if ($g['lines'] === []) {
+                continue;
+            }
+            return $g;
+        }
+        return null;
     }
 
     /**
@@ -300,13 +344,14 @@ class RestockOrders
         foreach ($lines as $l) {
             $totalQty += (int)($l['need_qty'] ?? 0);
         }
-        $header = 'Restock request — ' . $vendor;
-        if ($code !== '') {
-            $header .= ' (' . $code . ')';
-        }
+        $label = trim((string)($group['label'] ?? $vendor));
         $n = count($lines);
         $out = [];
-        $out[] = $header;
+        $out[] = 'Restock Request Form';
+        $out[] = $label;
+        if ($code !== '') {
+            $out[] = 'Vendor code: ' . $code;
+        }
         $out[] = 'Date: ' . date('j F Y');
         $out[] = sprintf(
             '%d item%s · %d unit%s to order',
@@ -327,13 +372,57 @@ class RestockOrders
             $out[] = $i . '. ' . (string)($l['title'] ?? '');
             $out[] = '   SKU: ' . ($sku !== '' ? $sku : '—');
             $out[] = '   Product ID: ' . (string)($l['product_id'] ?? '');
-            $out[] = '   Quantity to order: ' . (int)($l['need_qty'] ?? 0)
+            $out[] = '   Current inventory: ' . (int)($l['stock'] ?? 0);
+            $out[] = '   Order quantity: ' . (int)($l['need_qty'] ?? 0)
                 . '  (goal ' . (int)($l['goal_qty'] ?? 0) . ' − current ' . (int)($l['stock'] ?? 0) . ')';
             $out[] = '';
             $i++;
         }
         $out[] = 'Thank you.';
         return rtrim(implode("\n", $out)) . "\n";
+    }
+
+    /**
+     * Professionally formatted Restock Request Form PDF for a vendor group.
+     *
+     * @param array<string,mixed> $group
+     * @param list<array<string,mixed>>|null $lines
+     */
+    public static function reportPdf(array $group, ?array $lines = null): string
+    {
+        $lines = $lines ?? ($group['lines'] ?? []);
+        $company = Settings::get('company_name', 'Restock portal');
+        $label = trim((string)($group['label'] ?? $group['vendor_name'] ?? 'Vendor'));
+        $rows = [];
+        foreach ($lines as $l) {
+            $rows[] = [
+                (string)(($l['sku'] ?? '') !== '' ? $l['sku'] : '—'),
+                (string)($l['product_id'] ?? ''),
+                (string)($l['title'] ?? ''),
+                (string)(int)($l['stock'] ?? 0),
+                (string)(int)($l['need_qty'] ?? 0),
+            ];
+        }
+        return Pdf::build([
+            'title' => 'Restock Request Form',
+            'subtitle' => $label,
+            'meta' => [
+                'Prepared by ' . $company,
+                'Date: ' . date('j F Y'),
+                count($lines) . ' item' . (count($lines) === 1 ? '' : 's') . ' below goal',
+            ],
+            'headers' => ['SKU', 'Product ID', 'Product Name', 'Inv', 'Order Qty'],
+            'rows' => $rows,
+            'footer' => 'Please supply the listed quantities so on-hand stock can return to goal levels. Thank you.',
+        ]);
+    }
+
+    public static function reportFilename(array $group): string
+    {
+        $label = (string)($group['label'] ?? $group['vendor_name'] ?? 'vendor');
+        $slug = strtolower(preg_replace('/[^a-z0-9]+/i', '-', $label) ?? 'vendor');
+        $slug = trim($slug, '-');
+        return 'restock-request-' . ($slug !== '' ? $slug : 'vendor') . '.pdf';
     }
 
     public static function staffRates(): array

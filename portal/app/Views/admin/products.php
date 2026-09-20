@@ -47,8 +47,8 @@ new hd.DataGrid('productsGrid', {
     {key:'status', label:'Set status', options:[{value:'active',label:'active'},{value:'inactive',label:'inactive'}]}
   ],
   bulkNumber: [
-    {key:'min_qty', label:'Set min', min:0, tip:'Set minimum quantity for restock'},
-    {key:'goal_qty', label:'Set goal', min:0, tip:'Goal Stock Level'}
+    {key:'min_qty', label:'Set min', min:0, tip:'Minimum quantity to trigger a restock alert'},
+    {key:'goal_qty', label:'Set goal', min:0, tip:'Ideal restock level, budget/vendor stocks dependent'}
   ],
   columns: [
     {key:'id', label:'#'},
@@ -58,8 +58,8 @@ new hd.DataGrid('productsGrid', {
     {key:'vendor_id', label:'Vendor', editable:true, options: $vendorOpts},
     {key:'price_cents', label:'Retail', type:'money', editable:true},
     {key:'stock', label:'Stock', tip:'Current on-hand quantity (Shopify inventory)', editable:true},
-    {key:'min_qty', label:'Min', tip:'Set minimum quantity for restock', editable:true},
-    {key:'goal_qty', label:'Goal', tip:'Goal Stock Level', editable:true},
+    {key:'min_qty', label:'Min', tip:'Minimum quantity to trigger a restock alert', editable:true},
+    {key:'goal_qty', label:'Goal', tip:'Ideal restock level, budget/vendor stocks dependent', editable:true},
     {key:'status', label:'Status', tip:'Active products are watched for restock. Inactive are ignored.', type:'badge', editable:true, options:['active','inactive']},
     {key:'shopify_product_id', label:'Shopify ID'},
     {key:'archived', label:'Archived', type:'bool', editable:true, options:['0','1']},
