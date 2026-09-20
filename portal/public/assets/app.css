@@ -701,10 +701,18 @@ tr.wo-tray.wo-done td {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.restock-report .col-sku { width: 16%; }
-.restock-report .col-pid { width: 12%; }
+.restock-report .col-sku { width: 14%; }
+.restock-report .col-pid { width: 11%; }
 .restock-report .col-name { width: auto; }
-.restock-report .col-num { width: 9%; text-align: right; }
+.restock-report .col-inv,
+.restock-report .col-total { width: 8%; }
+.restock-report .col-qty { width: 16%; }
+.restock-report .col-inv,
+.restock-report .col-qty,
+.restock-report .col-total { text-align: right; }
+.restock-report th.col-inv,
+.restock-report th.col-qty,
+.restock-report th.col-total { text-overflow: clip; }
 .restock-report td.col-name {
   position: relative;
   cursor: pointer;

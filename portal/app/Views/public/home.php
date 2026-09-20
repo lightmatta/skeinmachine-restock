@@ -73,9 +73,9 @@ $company = Settings::get('company_name', '');
                 <th class="col-sku">SKU</th>
                 <th class="col-pid">ProductID</th>
                 <th class="col-name">Product Name</th>
-                <th class="col-num" title="Current Inventory Stock Level">Inv</th>
-                <th class="col-num">Order Quantity</th>
-                <th class="col-num" title="Inv + Order Quantity">Total</th>
+                <th class="col-inv" title="Current Inventory Stock Level">Inv</th>
+                <th class="col-qty">Order Quantity</th>
+                <th class="col-total" title="Inv + Order Quantity">Total</th>
               </tr>
             </thead>
             <tbody>
@@ -94,9 +94,9 @@ $company = Settings::get('company_name', '');
                 <td class="col-name" title="<?= e((string)$line['title']) ?>" data-full="<?= e((string)$line['title']) ?>" tabindex="0">
                   <span class="name-clip"><?= e((string)$line['title']) ?></span>
                 </td>
-                <td class="col-num need-qty" title="Current Inventory Stock Level"><?= (int)$line['stock'] ?></td>
-                <td class="col-num need-qty"><?= (int)$line['need_qty'] ?></td>
-                <td class="col-num need-qty"><?= (int)$line['stock'] + (int)$line['need_qty'] ?></td>
+                <td class="col-inv need-qty" title="Current Inventory Stock Level"><?= (int)$line['stock'] ?></td>
+                <td class="col-qty need-qty"><?= (int)$line['need_qty'] ?></td>
+                <td class="col-total need-qty"><?= (int)$line['stock'] + (int)$line['need_qty'] ?></td>
               </tr>
               <?php endforeach; ?>
             </tbody>
