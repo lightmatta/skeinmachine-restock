@@ -741,8 +741,10 @@
         cols
           .map((c) => {
             const caret = this.sortKey === c.key ? (this.sortDir === 1 ? " ▲" : " ▼") : "";
-            const tip = c.tip ? ` title="${hd.escape(c.tip)}"` : ` title="${hd.escape(c.label)}"`;
-            return `<th data-key="${c.key}"${tip}>${hd.escape(c.label)}<span class="sortcaret">${caret}</span></th>`;
+            const tipText = c.tip || (c.local ? "Preserved when Shopify syncs" : c.label);
+            const tip = ` title="${hd.escape(tipText)}"`;
+            const cls = c.local ? ' class="col-local"' : "";
+            return `<th data-key="${c.key}"${cls}${tip}>${hd.escape(c.label)}<span class="sortcaret">${caret}</span></th>`;
           })
           .join("") +
         (hasActions ? "<th>Actions</th>" : "") +
@@ -827,6 +829,7 @@
         cols.forEach((c) => {
           const td = document.createElement("td");
           td.dataset.key = c.key;
+          if (c.local) td.classList.add("col-local");
           td.innerHTML = this.formatCell(c, r[c.key], r);
           if (c.editable && !this.readonly) {
             td.classList.add("editable");
