@@ -243,7 +243,7 @@ class RestockOrders
     {
         $pdo = Database::pdo();
         $products = $pdo->query(
-            "SELECT p.id, p.sku, p.title, p.stock, p.goal_qty, p.vendor_id, p.shopify_product_id, p.source_id,
+            "SELECT p.id, p.sku, p.title, p.stock, p.min_qty, p.goal_qty, p.vendor_id, p.shopify_product_id, p.source_id,
                     COALESCE(NULLIF(s.vendor_name, ''), NULLIF(v.name, ''), 'Unassigned') AS vendor_name,
                     COALESCE(NULLIF(s.collection_name, ''), NULLIF(s.collection_id, ''), '') AS collection_name,
                     v.vendor_id AS vendor_code
@@ -265,6 +265,7 @@ class RestockOrders
             $productId = $shopifyId !== '' ? $shopifyId : (string)(int)$p['id'];
             $stock = (int)$p['stock'];
             $goal = (int)$p['goal_qty'];
+            $min = (int)$p['min_qty'];
             $need = max(0, $goal - $stock);
             $key = strtolower($vendorName);
             if (!isset($groups[$key])) {
@@ -286,6 +287,7 @@ class RestockOrders
                 'catalog_id' => (int)$p['id'],
                 'title' => (string)$p['title'],
                 'stock' => $stock,
+                'min_qty' => $min,
                 'goal_qty' => $goal,
                 'need_qty' => $need,
                 'collection_name' => $collection,
@@ -329,6 +331,83 @@ class RestockOrders
         return null;
     }
 
+    /** SKU / product ID shown on copy and PDF when the catalog value is missing. */
+    public static function displayCode(mixed $value): string
+    {
+        $v = trim((string)$value);
+        if ($v === '' || $v === '—') {
+            return 'unknown';
+        }
+        return $v;
+    }
+
+    /** Pastel urgency band for a report row: red (0), orange (≤50% of min), yellow (≤ min). */
+    public static function urgencyLevel(int $stock, int $min): string
+    {
+        if ($stock <= 0) {
+            return 'red';
+        }
+        if ($min <= 0) {
+            return '';
+        }
+        $ratio = $stock / $min;
+        if ($ratio <= 0.5) {
+            return 'orange';
+        }
+        if ($ratio <= 1.0) {
+            return 'yellow';
+        }
+        return '';
+    }
+
+    public static function urgencyColorsEnabled(): bool
+    {
+        return Settings::reportUrgencyColors();
+    }
+
+    /**
+     * How many lines in a vendor report are at or below Min.
+     *
+     * @param array<string,mixed> $group
+     */
+    public static function belowMinCount(array $group): int
+    {
+        $n = 0;
+        foreach ($group['lines'] ?? [] as $l) {
+            $min = (int)($l['min_qty'] ?? 0);
+            $stock = (int)($l['stock'] ?? 0);
+            if ($min > 0 && $stock <= $min) {
+                $n++;
+            }
+        }
+        return $n;
+    }
+
+    /**
+     * Vendor reports with the most products at or below Min, highest first.
+     *
+     * @param list<array<string,mixed>> $reports
+     * @return list<array<string,mixed>>
+     */
+    public static function attentionReports(array $reports, int $limit = 3): array
+    {
+        $scored = [];
+        foreach ($reports as $g) {
+            $g['below_min'] = self::belowMinCount($g);
+            if ($g['below_min'] > 0) {
+                $scored[] = $g;
+            }
+        }
+        usort($scored, static function (array $a, array $b): int {
+            $d = ((int)$b['below_min']) <=> ((int)$a['below_min']);
+            if ($d !== 0) {
+                return $d;
+            }
+            return strcasecmp((string)($a['vendor_name'] ?? ''), (string)($b['vendor_name'] ?? ''));
+        });
+        return array_slice($scored, 0, max(0, $limit));
+    }
+
     /**
      * Human-readable restock request suitable for pasting into a vendor email.
      *
@@ -368,10 +447,9 @@ class RestockOrders
         $out[] = '';
         $i = 1;
         foreach ($lines as $l) {
-            $sku = trim((string)($l['sku'] ?? ''));
             $out[] = $i . '. ' . (string)($l['title'] ?? '');
-            $out[] = '   SKU: ' . ($sku !== '' ? $sku : '—');
-            $out[] = '   Product ID: ' . (string)($l['product_id'] ?? '');
+            $out[] = '   SKU: ' . self::displayCode($l['sku'] ?? '');
+            $out[] = '   Product ID: ' . self::displayCode($l['product_id'] ?? '');
             $out[] = '   Current inventory: ' . (int)($l['stock'] ?? 0);
             $out[] = '   Order quantity: ' . (int)($l['need_qty'] ?? 0)
                 . '  (goal ' . (int)($l['goal_qty'] ?? 0) . ' − current ' . (int)($l['stock'] ?? 0) . ')';
@@ -399,8 +477,8 @@ class RestockOrders
             $inv = (int)($l['stock'] ?? 0);
             $need = (int)($l['need_qty'] ?? 0);
             $rows[] = [
-                (string)(($l['sku'] ?? '') !== '' ? $l['sku'] : '—'),
-                (string)($l['product_id'] ?? ''),
+                self::displayCode($l['sku'] ?? ''),
+                self::displayCode($l['product_id'] ?? ''),
                 (string)($l['title'] ?? ''),
                 (string)$inv,
                 (string)$need,

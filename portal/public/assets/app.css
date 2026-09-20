@@ -759,3 +759,86 @@ tr.wo-tray.wo-done td {
 .grid-vendor-filter span { font-size: 12px; color: var(--grey); }
 .grid-vendor-select { min-width: 200px; }
 
+.urgency-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--grey);
+}
+.urg-swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+}
+.urg-swatch.urg-red { background: #fde8e6; }
+.urg-swatch.urg-orange { background: #fdecd8; }
+.urg-swatch.urg-yellow { background: #fbf4d0; }
+.restock-report tbody tr.urgency-red td { background: #fde8e6; }
+.restock-report tbody tr.urgency-orange td { background: #fdecd8; }
+.restock-report tbody tr.urgency-yellow td { background: #fbf4d0; }
+
+.copy-preview-card { width: min(640px, 100%); }
+.copy-preview-letter {
+  margin-top: 12px;
+  max-height: min(58vh, 520px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fafafa;
+  padding: 16px 18px;
+}
+.copy-preview-letter pre {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  color: var(--ink);
+}
+
+.attention-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  display: grid;
+  gap: 10px;
+}
+.attention-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border: 1.5px solid #f0c7c2;
+  background: #fdf4f2;
+  border-radius: 12px;
+}
+.attention-rank {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--hl);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  flex: none;
+}
+.attention-copy { flex: 1; min-width: 160px; }
+.attention-copy strong { display: block; }
+.report-overview-list li.is-attention,
+table.grid tbody tr.is-attention td {
+  background: #fdf4f2;
+}
+.report-overview-list li.is-attention {
+  padding: 4px 8px;
+  border-radius: 8px;
+  list-style-position: inside;
+}
+

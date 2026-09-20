@@ -6,6 +6,7 @@ use App\Settings;
 $signedIn = !empty($signedIn);
 $reports = $reports ?? [];
 $company = Settings::get('company_name', '');
+$urgencyOn = RestockOrders::urgencyColorsEnabled();
 ?>
 <div class="container">
   <?php if (!$signedIn): ?>
@@ -24,6 +25,13 @@ $company = Settings::get('company_name', '');
       <div>
         <h1><?= Icons::get('clipboard', 22) ?> Reports</h1>
         <p class="muted">Items whose current stock is below Goal, grouped by vendor. Copy or print a Restock Request Form for each vendor.</p>
+        <?php if ($urgencyOn): ?>
+        <p class="urgency-legend" aria-label="Restock urgency colours">
+          <span class="urg-swatch urg-red">Out of stock</span>
+          <span class="urg-swatch urg-orange">≤ 50% of Min</span>
+          <span class="urg-swatch urg-yellow">At Min</span>
+        </p>
+        <?php endif; ?>
       </div>
     </div>
 
@@ -81,16 +89,20 @@ $company = Settings::get('company_name', '');
             <tbody>
               <?php foreach ($g['lines'] as $line):
                 $hay = strtolower(trim(($line['sku'] ?? '') . ' ' . ($line['product_id'] ?? '') . ' ' . ($line['title'] ?? '')));
+                $urg = $urgencyOn ? RestockOrders::urgencyLevel((int)$line['stock'], (int)($line['min_qty'] ?? 0)) : '';
+                $skuShow = RestockOrders::displayCode($line['sku'] ?? '');
+                $pidShow = RestockOrders::displayCode($line['product_id'] ?? '');
               ?>
-              <tr data-search="<?= e($hay) ?>"
+              <tr class="<?= $urg !== '' ? 'urgency-' . $urg : '' ?>"
+                  data-search="<?= e($hay) ?>"
                   data-sku="<?= e((string)$line['sku']) ?>"
                   data-pid="<?= e((string)$line['product_id']) ?>"
                   data-title="<?= e((string)$line['title']) ?>"
                   data-need="<?= (int)$line['need_qty'] ?>"
                   data-goal="<?= (int)$line['goal_qty'] ?>"
                   data-stock="<?= (int)$line['stock'] ?>">
-                <td class="col-sku"><?= e((string)$line['sku'] !== '' ? (string)$line['sku'] : '—') ?></td>
-                <td class="col-pid"><?= e((string)$line['product_id']) ?></td>
+                <td class="col-sku"><?= e($skuShow) ?></td>
+                <td class="col-pid"><?= e($pidShow) ?></td>
                 <td class="col-name" title="<?= e((string)$line['title']) ?>" data-full="<?= e((string)$line['title']) ?>" tabindex="0">
                   <span class="name-clip"><?= e((string)$line['title']) ?></span>
                 </td>
@@ -104,6 +116,19 @@ $company = Settings::get('company_name', '');
         </div>
       </article>
       <?php endforeach; ?>
+    </div>
+
+    <div class="modal" id="copyPreviewModal" hidden>
+      <div class="modal-card copy-preview-card" role="dialog" aria-labelledby="copyPreviewTitle" aria-modal="true">
+        <h2 id="copyPreviewTitle"><?= Icons::get('copy', 20) ?> Restock request</h2>
+        <p class="muted" id="copyPreviewStatus">A neatly formatted copy of this request is ready.</p>
+        <div class="copy-preview-letter">
+          <pre id="copyPreviewText"></pre>
+        </div>
+        <div class="toolbar" style="margin:16px 0 0">
+          <button type="button" class="btn btn-primary" id="copyPreviewClose">Done</button>
+        </div>
+      </div>
     </div>
   <?php endif; ?>
 </div>
@@ -185,9 +210,11 @@ page_script(<<<'JS'
     out.push('Please supply the following so we can bring on-hand stock up to our goal levels:');
     out.push('');
     items.forEach(function(it, i){
+      var sku = (it.sku && it.sku !== '—') ? it.sku : 'unknown';
+      var pid = (it.pid && it.pid !== '—') ? it.pid : 'unknown';
       out.push((i+1) + '. ' + it.title);
-      out.push('   SKU: ' + (it.sku !== '' ? it.sku : '—'));
-      out.push('   Product ID: ' + it.pid);
+      out.push('   SKU: ' + sku);
+      out.push('   Product ID: ' + pid);
       out.push('   Current inventory: ' + it.stock);
       out.push('   Order quantity: ' + it.need + '  (goal ' + it.goal + ' − current ' + it.stock + ')');
       out.push('   Total: ' + (it.stock + it.need));
@@ -223,14 +250,41 @@ page_script(<<<'JS'
   if (kwInp) kwInp.addEventListener('input', apply);
   apply();
 
+  function showCopyPreview(text, copied){
+    var modal = document.getElementById('copyPreviewModal');
+    var body = document.getElementById('copyPreviewText');
+    var status = document.getElementById('copyPreviewStatus');
+    if (!modal || !body) return;
+    body.textContent = text;
+    if (status) {
+      status.textContent = copied
+        ? 'Copied to your clipboard. Preview of the restock request:'
+        : 'Could not copy automatically. Select the text below to copy it.';
+    }
+    modal.hidden = false;
+  }
+  function hideCopyPreview(){
+    var modal = document.getElementById('copyPreviewModal');
+    if (modal) modal.hidden = true;
+  }
+  var previewClose = document.getElementById('copyPreviewClose');
+  if (previewClose) previewClose.addEventListener('click', hideCopyPreview);
+  var previewModal = document.getElementById('copyPreviewModal');
+  if (previewModal) {
+    previewModal.addEventListener('click', function(e){ if (e.target === previewModal) hideCopyPreview(); });
+  }
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') hideCopyPreview();
+  });
+
   document.querySelectorAll('.copy-report').forEach(function(btn){
     if (btn.classList.contains('pdf-report')) return;
     btn.addEventListener('click', async function(){
       var card = btn.closest('.restock-report');
       if (!card) return;
       var text = reportText(card);
+      var copied = false;
       try {
-        var copied = false;
         if (navigator.clipboard && navigator.clipboard.writeText) {
           try {
             await navigator.clipboard.writeText(text);
@@ -250,7 +304,11 @@ page_script(<<<'JS'
           copied = document.execCommand('copy');
           ta.remove();
         }
-        if (!copied) throw new Error('copy failed');
+      } catch (e) {
+        copied = false;
+      }
+      showCopyPreview(text, copied);
+      if (copied) {
         btn.classList.add('is-copied');
         btn.setAttribute('title', 'Copied');
         if (window.hd && hd.toast) hd.toast('Copied restock request');
@@ -258,8 +316,8 @@ page_script(<<<'JS'
           btn.classList.remove('is-copied');
           btn.setAttribute('title', 'Copy as text');
         }, 1600);
-      } catch (e) {
-        if (window.hd && hd.toast) hd.toast('Could not copy', 'error');
+      } else if (window.hd && hd.toast) {
+        hd.toast('Preview ready — copy the text from the window', 'error');
       }
     });
   });

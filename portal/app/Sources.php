@@ -28,11 +28,17 @@ class Sources
         return $row ?: null;
     }
 
+    public static function defaultFrequencyDays(): int
+    {
+        return Settings::defaultSyncFrequencyDays();
+    }
+
     public static function create(): int
     {
+        $freq = self::defaultFrequencyDays();
         Database::pdo()->prepare(
-            "INSERT INTO sources (vendor_name, collection_id, collection_name, sync_frequency_days) VALUES ('New vendor', '', '', 7)"
-        )->execute();
+            "INSERT INTO sources (vendor_name, collection_id, collection_name, sync_frequency_days) VALUES ('New vendor', '', '', ?)"
+        )->execute([$freq]);
         $id = (int)Database::pdo()->lastInsertId();
         self::rescheduleAll();
         return $id;
@@ -142,7 +148,10 @@ class Sources
     public static function dueDay(array $source, int $now = 0): string
     {
         $now = $now > 0 ? $now : time();
-        $freq = max(1, (int)($source['sync_frequency_days'] ?? 7));
+        $freq = (int)($source['sync_frequency_days'] ?? 0);
+        if ($freq < 1) {
+            $freq = self::defaultFrequencyDays();
+        }
         $last = trim((string)($source['last_sync_at'] ?? ''));
         $lastTs = $last !== '' ? (strtotime($last) ?: 0) : 0;
         $due = $lastTs > 0 ? $lastTs + ($freq * 86400) : $now;

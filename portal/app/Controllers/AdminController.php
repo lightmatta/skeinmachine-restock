@@ -67,10 +67,12 @@ class AdminController
             $uid = Auth::id();
             $assigned = array_values(array_filter($all, fn($w) => (int)($w['staff_user_id'] ?? 0) === $uid));
             $pending = array_values(array_filter($all, fn($w) => !WorkOrders::isDone((string)($w['status'] ?? ''))));
+            $staffReports = RestockOrders::goalReports();
             View::render('admin/staff_dashboard', [
                 'title' => 'Dashboard', 'active' => 'dashboard',
                 'assigned' => $assigned, 'open' => $pending,
-                'reports' => RestockOrders::goalReports(),
+                'reports' => $staffReports,
+                'attention' => RestockOrders::attentionReports($staffReports, 3),
             ]);
             return;
         }
@@ -101,6 +103,7 @@ class AdminController
             'title' => 'Admin', 'active' => 'dashboard',
             'unread' => $unread, 'activity' => $activity, 'stats' => $stats,
             'reports' => $reports,
+            'attention' => RestockOrders::attentionReports($reports, 3),
         ]);
     }
 
@@ -255,6 +258,13 @@ class AdminController
             }
             // Wholesale, notifications, front-page HTML, and colour-detect are retired.
             Settings::set('allow_automated_sync', isset($_POST['allow_automated_sync']) ? '1' : '0');
+            Settings::set('report_urgency_colors', isset($_POST['report_urgency_colors']) ? '1' : '0');
+            if (array_key_exists('default_sync_frequency_days', $_POST)) {
+                Settings::set(
+                    'default_sync_frequency_days',
+                    (string)max(1, (int)$_POST['default_sync_frequency_days'])
+                );
+            }
             Sources::rescheduleAll();
             if (array_key_exists('currency', $_POST)) {
                 Settings::set('currency', \App\Currency::normalize((string)$_POST['currency']));

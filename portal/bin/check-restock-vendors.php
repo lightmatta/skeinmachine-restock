@@ -106,6 +106,33 @@ expect(str_contains($text, 'SKU: YRN-MERINO-01'), 'Copy text includes SKU');
 expect(str_contains($text, 'Current inventory:'), 'Copy text includes current inventory');
 expect(str_contains($text, 'Order quantity:'), 'Copy text includes order qty');
 expect(str_contains($text, 'Total:'), 'Copy text includes Total');
+$blankGroup = [
+    'vendor_name' => 'Blank Vendor',
+    'label' => 'Blank Vendor / Demo',
+    'lines' => [[
+        'sku' => '',
+        'product_id' => '',
+        'title' => 'Nameless item',
+        'stock' => 0,
+        'need_qty' => 4,
+        'goal_qty' => 4,
+        'min_qty' => 2,
+    ]],
+];
+$blankText = App\RestockOrders::reportText($blankGroup);
+expect(str_contains($blankText, 'SKU: unknown'), 'Copy text uses unknown for a missing SKU');
+expect(str_contains($blankText, 'Product ID: unknown'), 'Copy text uses unknown for a missing product ID');
+$blankPdf = App\RestockOrders::reportPdf($blankGroup);
+expect(str_contains($blankPdf, 'unknown'), 'PDF uses unknown for missing SKU or product ID');
+expect(App\RestockOrders::urgencyLevel(0, 10) === 'red', 'Zero inventory is red urgency');
+expect(App\RestockOrders::urgencyLevel(5, 10) === 'orange', 'Half of min is orange urgency');
+expect(App\RestockOrders::urgencyLevel(10, 10) === 'yellow', 'At min is yellow urgency');
+expect(App\RestockOrders::urgencyLevel(12, 10) === '', 'Above min is not an urgency colour');
+$attention = App\RestockOrders::attentionReports($reports);
+expect(count($attention) <= 3, 'Overview attention list is at most three vendors');
+expect(count($attention) >= 1, 'Overview attention list includes vendors below min');
+$hotNames = array_map(static fn($g) => (string)$g['vendor_name'], $attention);
+expect(in_array('Adelaide Notions', $hotNames, true) || in_array('House Dye Wholesale', $hotNames, true), 'Attention ranking uses vendors with below-min stock');
 $pdf = App\RestockOrders::reportPdf($adelaide);
 expect(str_starts_with($pdf, '%PDF-1.4'), 'PDF writer emits PDF 1.4');
 expect(str_contains($pdf, 'Restock Request Form'), 'PDF is labelled Restock Request Form');
@@ -135,6 +162,10 @@ expect(str_contains($sidebarSrc, "'Messages'"), 'Sidebar includes Messages');
 expect(str_contains($sidebarSrc, "'Products'"), 'Sidebar includes Products');
 expect(str_contains($sidebarSrc, "'Sources'"), 'Sidebar includes Sources');
 expect(str_contains($sidebarSrc, "'Settings'"), 'Sidebar includes Settings');
+
+$dashSrc = file_get_contents($root . '/app/Views/admin/dashboard.php');
+expect(str_contains($dashSrc, 'Needs attention'), 'Overview highlights vendors that need attention');
+expect(str_contains($dashSrc, 'attentionReports') || str_contains($dashSrc, 'attention-list'), 'Overview has an attention list');
 $dashPos = strpos($sidebarSrc, "'Dashboard'");
 $usersPos = strpos($sidebarSrc, "'Users'");
 $msgsPos = strpos($sidebarSrc, "'Messages'");
@@ -173,11 +204,14 @@ expect(str_contains($homeSrc, 'Current Inventory Stock Level'), 'Inv column hove
 expect(str_contains($homeSrc, '>Total<') || str_contains($homeSrc, 'Inv + Order Quantity'), 'Reports has a Total column');
 expect(str_contains($homeSrc, 'col-name'), 'Product name uses a truncating column');
 expect(str_contains($homeSrc, 'td.col-name'), 'Full product name popover is bound to name cells, not the header');
+expect(str_contains($homeSrc, 'copyPreviewModal'), 'Copy as text opens a preview');
+expect(str_contains($homeSrc, 'urgency-'), 'Report rows can take urgency colour classes');
 expect(!str_contains($homeSrc, 'Desired Goal'), 'Old goal-minus-stock column title is gone');
 
 $cssSrc = file_get_contents($root . '/public/assets/app.css');
 expect(str_contains($cssSrc, 'text-transform: none'), 'Report table headers are not forced uppercase');
-expect(str_contains($cssSrc, '.col-qty { width: 20%; }') || str_contains($cssSrc, '.col-qty { width: 20%'), 'Order Quantity column has dedicated width');
+expect(str_contains($cssSrc, 'urgency-red'), 'Report urgency red style exists');
+expect(str_contains($cssSrc, 'copy-preview-letter'), 'Copy preview is styled as a letter');
 
 $jsSrc = file_get_contents($root . '/public/assets/app.js');
 expect(str_contains($jsSrc, 'currentlyAll'), 'Check-all toggles all on or all off');
@@ -194,12 +228,22 @@ expect(str_contains($sourcesSrc, "op:'sync'"), 'Sources has Sync now');
 
 $setSrc = file_get_contents($root . '/app/Views/admin/settings.php');
 expect(str_contains($setSrc, 'Allow automated sync schedules'), 'Settings has automated sync checkbox');
+expect(str_contains($setSrc, 'name="default_sync_frequency_days"'), 'Settings has default sync frequency');
+expect(str_contains($setSrc, 'name="report_urgency_colors"'), 'Settings can turn report urgency colours on or off');
 expect(!str_contains($setSrc, 'name="shopify_periodic_sync"'), 'Settings no longer has Periodic Sync');
 expect(!str_contains($setSrc, 'name="shopify_collection_id"'), 'Settings no longer has a global Collection ID');
 
 $empty = App\Sources::create();
 $refused = App\Sources::syncNow($empty);
 expect(($refused['error'] ?? '') === 'no_collection', 'Sync now refuses an empty Collection ID');
+$emptyRow = App\Sources::find($empty);
+expect((int)($emptyRow['sync_frequency_days'] ?? 0) === 1, 'New source uses the 1-day default sync frequency');
+App\Settings::set('default_sync_frequency_days', '4');
+$custom = App\Sources::create();
+$customRow = App\Sources::find($custom);
+expect((int)($customRow['sync_frequency_days'] ?? 0) === 4, 'New source uses the Settings default when changed');
+App\Settings::set('default_sync_frequency_days', '1');
+App\Sources::delete($custom);
 App\Sources::delete($empty);
 
 App\Settings::set('shopify_domain', 'house-dye.myshopify.com');

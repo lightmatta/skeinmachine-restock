@@ -54,6 +54,16 @@ $s = fn(string $k, string $d = '') => e($settings[$k] ?? $d);
           <span style="margin:0">Allow automated sync schedules</span>
         </label>
         <p class="help" style="margin-top:-4px">When this is on, each source syncs on its own frequency (in days). Sources due on the same day are spread evenly across 24 hours so the server is not hit with every collection at once.</p>
+        <label class="field" style="margin-top:12px;max-width:280px">
+          <span>Default sync frequency (days)</span>
+          <input type="number" min="1" name="default_sync_frequency_days" value="<?= e((string)max(1, (int)($settings['default_sync_frequency_days'] ?? 1))) ?>">
+        </label>
+        <p class="help" style="margin-top:-4px">Applied when a new source is created. Admins can still change the frequency on each row in Sources.</p>
+        <label class="field" style="display:flex;gap:8px;align-items:center;margin-top:12px">
+          <input type="checkbox" name="report_urgency_colors" value="1" style="width:auto" <?= ($settings['report_urgency_colors'] ?? '1') !== '0' ? 'checked' : '' ?>>
+          <span style="margin:0">Show restock urgency colours on report rows</span>
+        </label>
+        <p class="help" style="margin-top:-4px">Pastel red when inventory is 0, orange at or below 50% of Min, yellow at Min. Turn off for a plain table.</p>
         <div class="toolbar" style="margin:4px 0 0">
           <button type="button" class="btn btn-sm" id="shopifyTest"><?= Icons::get('link', 16) ?> Test connection</button>
           <span id="shopifyResult" class="help"></span>

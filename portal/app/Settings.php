@@ -143,4 +143,16 @@ class Settings
     {
         return self::get('detect_colours_on_import', '0') === '1';
     }
+
+    /** Default Sources sync frequency when a new row is created. */
+    public static function defaultSyncFrequencyDays(): int
+    {
+        return max(1, (int)self::get('default_sync_frequency_days', '1'));
+    }
+
+    /** Pastel restock urgency colours on report rows. */
+    public static function reportUrgencyColors(): bool
+    {
+        return self::get('report_urgency_colors', '1') === '1';
+    }
 }

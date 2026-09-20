@@ -148,10 +148,11 @@ class Database
             return;
         }
         $ins = $pdo->prepare(
-            'INSERT INTO sources (vendor_name, collection_id, collection_name, sync_frequency_days) VALUES (?,?,?,7)'
+            'INSERT INTO sources (vendor_name, collection_id, collection_name, sync_frequency_days) VALUES (?,?,?,?)'
         );
+        $freq = Settings::defaultSyncFrequencyDays();
         foreach ($vendors as $v) {
-            $ins->execute([(string)$v['name'], '', (string)$v['name']]);
+            $ins->execute([(string)$v['name'], '', (string)$v['name'], $freq]);
             $sid = (int)$pdo->lastInsertId();
             $pdo->prepare('UPDATE products SET source_id = ? WHERE vendor_id = ? AND (source_id IS NULL OR source_id = 0)')
                 ->execute([$sid, (int)$v['id']]);
@@ -196,6 +197,8 @@ class Database
             'shopify_periodic_minutes' => '60',
             'shopify_periodic_next_at' => '0',
             'allow_automated_sync' => '0',
+            'default_sync_frequency_days' => '1',
+            'report_urgency_colors' => '1',
             'detect_colours_on_import' => '0',
         ];
         $stmt = $pdo->prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');

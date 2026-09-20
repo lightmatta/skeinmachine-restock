@@ -113,7 +113,7 @@ CREATE TABLE IF NOT EXISTS sources (
     vendor_name          TEXT NOT NULL,
     collection_id        TEXT NOT NULL DEFAULT '',
     collection_name      TEXT NOT NULL DEFAULT '',
-    sync_frequency_days  INTEGER NOT NULL DEFAULT 7,
+    sync_frequency_days  INTEGER NOT NULL DEFAULT 1,
     last_sync_at         TEXT,
     next_sync_at         TEXT,
     archived             INTEGER NOT NULL DEFAULT 0,

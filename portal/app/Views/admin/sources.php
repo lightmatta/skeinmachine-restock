@@ -25,7 +25,7 @@ page_script(<<<JS
       {key:'vendor_name', label:'Vendor Name', editable:true},
       {key:'collection_name', label:'Source Name', tip:'Shopify collection title. Filled automatically when empty; a name you type is kept.', editable:true},
       {key:'collection_id', label:'Collection ID', tip:'Shopify collection used when you tap Sync now', editable:true},
-      {key:'sync_frequency_days', label:'Sync frequency (days)', tip:'How often automated sync should pull this collection', editable:true},
+      {key:'sync_frequency_days', label:'Sync frequency (days)', tip:'How often automated sync should pull this collection. New sources start from the default in Settings.', editable:true},
       {key:'last_sync_at', label:'Last sync', tip:'Date and time of the last successful Shopify pull'}
     ],
     hidden: $hiddenJson,
