@@ -10,7 +10,7 @@ $vendorOpts = json_encode($vendors ?? [['value' => 0, 'label' => '—']], JSON_U
     <div class="page-head"><div><h1><?= Icons::get('box', 22) ?> Products</h1>
       <p class="muted"><?= $readonly
         ? 'Catalog is read-only for staff accounts.'
-        : 'Shopify sync fills the catalog. Set Vendor, Min (restock trigger) and Goal (target on-hand). Select more than one row to bulk-set status, Min, or Goal. Double-click a cell to edit.' ?></p></div>
+        : 'Shopify sync fills the catalog. Set Vendor, Min (restock trigger) and Goal (target on-hand). Grey-tinted columns are portal-only and stay put when Shopify syncs over catalog fields. Select more than one row to bulk-set status, Min, or Goal. Double-click a cell to edit.' ?></p></div>
       <?php if (!$readonly): ?>
       <button type="button" class="btn btn-danger" id="deleteAllBtn"><?= Icons::get('trash', 16) ?> Delete all products</button>
       <?php endif; ?>
@@ -52,18 +52,18 @@ new hd.DataGrid('productsGrid', {
     {key:'goal_qty', label:'Set goal', min:0, tip:'Ideal restock level, budget/vendor stocks dependent'}
   ],
   columns: [
-    {key:'id', label:'#'},
+    {key:'id', label:'#', local:true},
     {key:'sku', label:'SKU', editable:true},
     {key:'title', label:'Title', editable:true},
     {key:'category', label:'Category', editable:true},
-    {key:'vendor_id', label:'Vendor', editable:true, options: $vendorOpts},
+    {key:'vendor_id', label:'Vendor', editable:true, options: $vendorOpts, local:true},
     {key:'price_cents', label:'Retail', type:'money', editable:true},
     {key:'stock', label:'Stock', tip:'Current on-hand quantity (Shopify inventory)', editable:true},
-    {key:'min_qty', label:'Min', tip:'Minimum quantity to trigger a restock alert', editable:true},
-    {key:'goal_qty', label:'Goal', tip:'Ideal restock level, budget/vendor stocks dependent', editable:true},
-    {key:'status', label:'Status', tip:'Active products are watched for restock. Inactive are ignored.', type:'badge', editable:true, options:['active','inactive']},
+    {key:'min_qty', label:'Min', tip:'Minimum quantity to trigger a restock alert', editable:true, local:true},
+    {key:'goal_qty', label:'Goal', tip:'Ideal restock level, budget/vendor stocks dependent', editable:true, local:true},
+    {key:'status', label:'Status', tip:'Active products are watched for restock. Inactive are ignored. Preserved when Shopify syncs.', type:'badge', editable:true, options:['active','inactive'], local:true},
     {key:'shopify_product_id', label:'Shopify ID'},
-    {key:'archived', label:'Archived', type:'bool', editable:true, options:['0','1']},
+    {key:'archived', label:'Archived', type:'bool', editable:true, options:['0','1'], local:true},
     {key:'description', label:'Description', editable:true}
   ],
   hidden: $hiddenJson,

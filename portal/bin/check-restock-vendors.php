@@ -217,6 +217,13 @@ expect(str_contains($prodSrc, 'vendorFilter'), 'Products grid has select by vend
 expect(str_contains($prodSrc, 'Minimum quantity to trigger a restock alert'), 'Min hover is the restock-alert description');
 expect(str_contains($prodSrc, 'Ideal restock level, budget/vendor stocks dependent'), 'Goal hover is the ideal restock description');
 
+foreach (['id', 'vendor_id', 'min_qty', 'goal_qty', 'status', 'archived'] as $key) {
+    expect((bool)preg_match("/key:'" . preg_quote($key, '/') . "'[^\\n]*local:true/", $prodSrc), $key . ' is marked local (preserved on Shopify sync)');
+}
+foreach (['sku', 'title', 'category', 'price_cents', 'stock', 'shopify_product_id', 'description'] as $key) {
+    expect(!preg_match("/key:'" . preg_quote($key, '/') . "'[^\\n]*local:true/", $prodSrc), $key . ' is overwritten by Shopify sync and is not marked local');
+}
+
 $loginSrc = file_get_contents($root . '/app/Views/auth/login.php');
 expect(!str_contains($loginSrc, 'Apply here'), 'Login has no wholesale apply link');
 
@@ -239,16 +246,21 @@ expect(str_contains($homeSrc, 'groupBySource'), 'Reports can group by Source Nam
 expect(str_contains($homeSrc, 'isGrouped'), 'Grouped header sorts keep source rows together');
 expect(str_contains($homeSrc, '&order='), 'PDF link includes the visible row order');
 expect(!str_contains($homeSrc, 'Desired Goal'), 'Old goal-minus-stock column title is gone');
+expect(str_contains($homeSrc, 'col-source col-local'), 'Reports Source Name is tinted as a local column');
+expect(str_contains($homeSrc, 'col-qty col-local'), 'Reports Order Quantity is tinted as a local column');
+expect(str_contains($homeSrc, 'col-total col-local'), 'Reports Total is tinted as a local column');
 
 $cssSrc = file_get_contents($root . '/public/assets/app.css');
 expect(str_contains($cssSrc, 'text-transform: none'), 'Report table headers are not forced uppercase');
 expect(str_contains($cssSrc, 'urg-scale') && str_contains($cssSrc, 'linear-gradient'), 'Report urgency uses a continuous colour scale');
 expect(str_contains($cssSrc, 'copy-preview-letter'), 'Copy preview is styled as a letter');
+expect(str_contains($cssSrc, 'td.col-local') && str_contains($cssSrc, 'color-mix'), 'Local columns use a 5% darker fill');
 
 $jsSrc = file_get_contents($root . '/public/assets/app.js');
 expect(str_contains($jsSrc, 'currentlyAll'), 'Check-all toggles all on or all off');
 expect(str_contains($jsSrc, 'vendorFilter'), 'Products grid can filter by vendor');
 expect(!str_contains($jsSrc, 'this.selected.clear();'), 'Bulk min/goal does not clear the selection');
+expect(str_contains($jsSrc, 'col-local') && str_contains($jsSrc, 'c.local'), 'DataGrid tints local columns via col-local');
 
 $sourcesSrc = file_get_contents($root . '/app/Views/admin/sources.php');
 expect(str_contains($sourcesSrc, 'Vendor Name'), 'Sources has Vendor Name');
@@ -257,6 +269,9 @@ expect(str_contains($sourcesSrc, 'Collection ID'), 'Sources has Collection ID');
 expect(str_contains($sourcesSrc, 'Sync frequency'), 'Sources has sync frequency');
 expect(str_contains($sourcesSrc, 'Last sync'), 'Sources has last sync');
 expect(str_contains($sourcesSrc, "op:'sync'"), 'Sources has Sync now');
+expect((bool)preg_match("/key:'vendor_name'[^\\n]*local:true/", $sourcesSrc), 'Sources vendor name is a local column');
+expect((bool)preg_match("/key:'collection_id'[^\\n]*local:true/", $sourcesSrc), 'Sources collection ID is a local column');
+expect(!preg_match("/key:'last_sync_at'[^\\n]*local:true/", $sourcesSrc), 'Sources last sync is filled by Shopify and is not local');
 
 $setSrc = file_get_contents($root . '/app/Views/admin/settings.php');
 expect(str_contains($setSrc, 'Allow automated sync schedules'), 'Settings has automated sync checkbox');

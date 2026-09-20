@@ -88,10 +88,10 @@ $urgencyOn = RestockOrders::urgencyColorsEnabled();
                 <th class="col-sku" data-sort="sku">SKU<span class="sortcaret"></span></th>
                 <th class="col-pid" data-sort="pid">ProductID<span class="sortcaret"></span></th>
                 <th class="col-name" data-sort="title">Product Name<span class="sortcaret"></span></th>
-                <th class="col-source" data-sort="source" title="Shopify source / collection">Source Name<span class="sortcaret"></span></th>
+                <th class="col-source col-local" data-sort="source" title="Shopify source / collection. Preserved when product syncs.">Source Name<span class="sortcaret"></span></th>
                 <th class="col-inv" data-sort="stock" title="Current Inventory Stock Level">Inv<span class="sortcaret"></span></th>
-                <th class="col-qty" data-sort="need">Order Quantity<span class="sortcaret"></span></th>
-                <th class="col-total" data-sort="total" title="Inv + Order Quantity">Total<span class="sortcaret"></span></th>
+                <th class="col-qty col-local" data-sort="need" title="Recommended order quantity from Goal. Preserved when Shopify syncs.">Order Quantity<span class="sortcaret"></span></th>
+                <th class="col-total col-local" data-sort="total" title="Inv + Order Quantity">Total<span class="sortcaret"></span></th>
               </tr>
             </thead>
             <tbody>
@@ -123,10 +123,10 @@ $urgencyOn = RestockOrders::urgencyColorsEnabled();
                 <td class="col-name" title="<?= e((string)$line['title']) ?>" data-full="<?= e((string)$line['title']) ?>" tabindex="0">
                   <span class="name-clip"><?= e((string)$line['title']) ?></span>
                 </td>
-                <td class="col-source" title="<?= e($sourceShow) ?>"><?= e($sourceShow) ?></td>
+                <td class="col-source col-local" title="<?= e($sourceShow) ?>"><?= e($sourceShow) ?></td>
                 <td class="col-inv need-qty" title="Current Inventory Stock Level · <?= (int)$pct ?>% of Min"><?= (int)$line['stock'] ?></td>
-                <td class="col-qty need-qty"><?= (int)$line['need_qty'] ?></td>
-                <td class="col-total need-qty"><?= (int)$line['stock'] + (int)$line['need_qty'] ?></td>
+                <td class="col-qty col-local need-qty"><?= (int)$line['need_qty'] ?></td>
+                <td class="col-total col-local need-qty"><?= (int)$line['stock'] + (int)$line['need_qty'] ?></td>
               </tr>
               <?php endforeach; ?>
             </tbody>

@@ -292,6 +292,17 @@ table.grid th, table.grid td { padding: 9px 12px; text-align: left; border-botto
 table.grid thead th { position: sticky; top: 0; background: var(--bg-soft); z-index: 2; cursor: pointer; user-select: none; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--grey); }
 table.grid thead th .sortcaret { color: var(--hl); }
 table.grid tbody tr:hover { background: var(--bg-soft); }
+/* Portal-only / auto-generated columns: 5% darker than the synced cell fill
+   (white → 5% grey). Rows that already have a colour (hover, urgency) keep
+   that fill on synced cells and darken the local ones by the same amount. */
+table.grid th.col-local,
+table.grid td.col-local {
+  background: color-mix(in srgb, #000 5%, var(--col-fill, var(--bg, #fff)));
+}
+table.grid thead th.col-local { --col-fill: var(--bg-soft, #fafafa); }
+table.grid tbody tr:hover td.col-local { --col-fill: var(--bg-soft, #fafafa); }
+table.grid tbody tr.is-expanded td.col-local { --col-fill: var(--hl-soft); }
+.restock-unavail-row td.col-local { --col-fill: #fff4f2; }
 table.grid td.editable { cursor: text; }
 table.grid td.editable:hover { box-shadow: inset 0 0 0 1.5px var(--hl-soft); }
 table.grid input.cell-edit { padding: 4px 6px; border: 1.5px solid var(--hl); border-radius: 6px; }
@@ -801,6 +812,10 @@ tr.wo-tray.wo-done td {
   gap: 8px;
 }
 .restock-report tbody tr.has-urgency td { background-color: var(--urg); }
+.restock-report tbody tr.has-urgency td.col-local {
+  --col-fill: var(--urg);
+  background-color: color-mix(in srgb, #000 5%, var(--urg));
+}
 .restock-report table.grid thead th { cursor: pointer; }
 .restock-report table.grid thead th[aria-sort] { color: var(--ink); }
 .restock-report table.grid thead th.is-group-col { color: var(--ink); }

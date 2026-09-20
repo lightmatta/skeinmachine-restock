@@ -32,10 +32,10 @@ use App\Icons;
                 <th>SKU</th>
                 <th>Product</th>
                 <th class="num">Our stock</th>
-                <th class="num" title="Set minimum quantity for restock">Min</th>
-                <th class="num" title="Goal Stock Level">Goal</th>
-                <th class="num">Vendor stock</th>
-                <th class="num">Recommend</th>
+                <th class="num col-local" title="Set minimum quantity for restock. Preserved when Shopify syncs.">Min</th>
+                <th class="num col-local" title="Goal Stock Level. Preserved when Shopify syncs.">Goal</th>
+                <th class="num col-local" title="Stock scraped from the vendor, not from Shopify">Vendor stock</th>
+                <th class="num col-local" title="Recommended order quantity from Goal">Recommend</th>
               </tr>
             </thead>
             <tbody>
@@ -47,10 +47,10 @@ use App\Icons;
                 <td><?= e((string)$line['sku']) ?></td>
                 <td><?= e((string)$line['title']) ?><?php if ($line['vendor_title'] !== '' && $line['vendor_title'] !== $line['title']): ?> <span class="muted">(<?= e((string)$line['vendor_title']) ?>)</span><?php endif; ?></td>
                 <td class="num"><?= (int)$line['stock'] ?></td>
-                <td class="num"><?= (int)$line['min_qty'] ?></td>
-                <td class="num"><?= (int)$line['goal_qty'] ?></td>
-                <td class="num"><?= (int)$line['vendor_stock'] ?></td>
-                <td class="num"><strong><?= (int)$line['recommend_qty'] ?></strong></td>
+                <td class="num col-local"><?= (int)$line['min_qty'] ?></td>
+                <td class="num col-local"><?= (int)$line['goal_qty'] ?></td>
+                <td class="num col-local"><?= (int)$line['vendor_stock'] ?></td>
+                <td class="num col-local"><strong><?= (int)$line['recommend_qty'] ?></strong></td>
               </tr>
             <?php endforeach; ?>
             </tbody>
@@ -65,10 +65,10 @@ use App\Icons;
                 <th>SKU</th>
                 <th>Product</th>
                 <th class="num">Our stock</th>
-                <th class="num" title="Set minimum quantity for restock">Min</th>
-                <th class="num" title="Goal Stock Level">Goal</th>
-                <th class="num">Vendor stock</th>
-                <th class="num">Recommend</th>
+                <th class="num col-local" title="Set minimum quantity for restock. Preserved when Shopify syncs.">Min</th>
+                <th class="num col-local" title="Goal Stock Level. Preserved when Shopify syncs.">Goal</th>
+                <th class="num col-local" title="Stock scraped from the vendor, not from Shopify">Vendor stock</th>
+                <th class="num col-local" title="Recommended order quantity from Goal">Recommend</th>
               </tr>
             </thead>
             <tbody>
@@ -80,10 +80,10 @@ use App\Icons;
                 <td><?= e((string)$line['sku']) ?></td>
                 <td><?= e((string)$line['title']) ?></td>
                 <td class="num"><?= (int)$line['stock'] ?></td>
-                <td class="num"><?= (int)$line['min_qty'] ?></td>
-                <td class="num"><?= (int)$line['goal_qty'] ?></td>
-                <td class="num"><span class="badge stalled">0</span></td>
-                <td class="num"><?= (int)$line['recommend_qty'] ?></td>
+                <td class="num col-local"><?= (int)$line['min_qty'] ?></td>
+                <td class="num col-local"><?= (int)$line['goal_qty'] ?></td>
+                <td class="num col-local"><span class="badge stalled">0</span></td>
+                <td class="num col-local"><?= (int)$line['recommend_qty'] ?></td>
               </tr>
             <?php endforeach; ?>
             </tbody>

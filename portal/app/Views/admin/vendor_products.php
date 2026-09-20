@@ -46,18 +46,18 @@ page_script(<<<JS
       {key:'status', label:'Set status', options:[{value:'active',label:'active'},{value:'inactive',label:'inactive'}]}
     ],
     columns: [
-      {key:'id', label:'#'},
-      {key:'vendor_name', label:'Vendor'},
-      {key:'vendor_id', label:'Vendor ID', editable:true, options: $vendorOptsJson},
-      {key:'vendor_product_id', label:'Product ID', editable:true},
-      {key:'sku', label:'SKU', editable:true},
-      {key:'title', label:'Title', editable:true},
-      {key:'stock', label:'Vendor stock', tip:'Available stock on the vendor site', editable:true},
+      {key:'id', label:'#', local:true},
+      {key:'vendor_name', label:'Vendor', local:true},
+      {key:'vendor_id', label:'Vendor ID', editable:true, options: $vendorOptsJson, local:true},
+      {key:'vendor_product_id', label:'Product ID', editable:true, local:true},
+      {key:'sku', label:'SKU', editable:true, local:true},
+      {key:'title', label:'Title', editable:true, local:true},
+      {key:'stock', label:'Vendor stock', tip:'Available stock on the vendor site', editable:true, local:true},
       {key:'catalog_stock', label:'Our stock', tip:'Matched catalog on-hand quantity'},
       {key:'matched_title', label:'Matched product', tip:'Catalog product matched by SKU, product id, or title'},
-      {key:'price_cents', label:'Price', type:'money', editable:true},
-      {key:'status', label:'Status', type:'badge', editable:true, options:['active','inactive']},
-      {key:'source_url', label:'Source URL', editable:true}
+      {key:'price_cents', label:'Price', type:'money', editable:true, local:true},
+      {key:'status', label:'Status', type:'badge', editable:true, options:['active','inactive'], local:true},
+      {key:'source_url', label:'Source URL', editable:true, local:true}
     ],
     hidden: $hiddenJson,
     persistHidden: $persistKey
