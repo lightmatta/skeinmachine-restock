@@ -26,11 +26,14 @@ $urgencyOn = RestockOrders::urgencyColorsEnabled();
         <h1><?= Icons::get('clipboard', 22) ?> Reports</h1>
         <p class="muted">Items whose current stock is below Goal, grouped by vendor. Copy or print a Restock Request Form for each vendor.</p>
         <?php if ($urgencyOn): ?>
-        <p class="urgency-legend" aria-label="Restock urgency colours">
-          <span class="urg-swatch urg-red">Out of stock</span>
-          <span class="urg-swatch urg-orange">≤ 50% of Min</span>
-          <span class="urg-swatch urg-yellow">At Min</span>
-        </p>
+        <div class="urgency-legend" aria-label="Restock urgency colours from out of stock to Min">
+          <span class="urg-scale" aria-hidden="true"></span>
+          <span class="urg-scale-labels">
+            <span>0 — out of stock</span>
+            <span>50% of Min</span>
+            <span>Min</span>
+          </span>
+        </div>
         <?php endif; ?>
       </div>
     </div>
@@ -89,11 +92,15 @@ $urgencyOn = RestockOrders::urgencyColorsEnabled();
             <tbody>
               <?php foreach ($g['lines'] as $line):
                 $hay = strtolower(trim(($line['sku'] ?? '') . ' ' . ($line['product_id'] ?? '') . ' ' . ($line['title'] ?? '')));
-                $urg = $urgencyOn ? RestockOrders::urgencyLevel((int)$line['stock'], (int)($line['min_qty'] ?? 0)) : '';
+                $stock = (int)$line['stock'];
+                $min = (int)($line['min_qty'] ?? 0);
+                $urgColor = $urgencyOn ? RestockOrders::urgencyColor($stock, $min) : '';
                 $skuShow = RestockOrders::displayCode($line['sku'] ?? '');
                 $pidShow = RestockOrders::displayCode($line['product_id'] ?? '');
+                $pct = $min > 0 ? (int)round(100 * $stock / $min) : ($stock <= 0 ? 0 : 100);
               ?>
-              <tr class="<?= $urg !== '' ? 'urgency-' . $urg : '' ?>"
+              <tr class="<?= $urgColor !== '' ? 'has-urgency' : '' ?>"
+                  <?= $urgColor !== '' ? 'style="--urg:' . e($urgColor) . '"' : '' ?>
                   data-search="<?= e($hay) ?>"
                   data-sku="<?= e((string)$line['sku']) ?>"
                   data-pid="<?= e((string)$line['product_id']) ?>"
@@ -106,7 +113,7 @@ $urgencyOn = RestockOrders::urgencyColorsEnabled();
                 <td class="col-name" title="<?= e((string)$line['title']) ?>" data-full="<?= e((string)$line['title']) ?>" tabindex="0">
                   <span class="name-clip"><?= e((string)$line['title']) ?></span>
                 </td>
-                <td class="col-inv need-qty" title="Current Inventory Stock Level"><?= (int)$line['stock'] ?></td>
+                <td class="col-inv need-qty" title="Current Inventory Stock Level · <?= (int)$pct ?>% of Min"><?= (int)$line['stock'] ?></td>
                 <td class="col-qty need-qty"><?= (int)$line['need_qty'] ?></td>
                 <td class="col-total need-qty"><?= (int)$line['stock'] + (int)$line['need_qty'] ?></td>
               </tr>

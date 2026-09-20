@@ -63,7 +63,7 @@ $s = fn(string $k, string $d = '') => e($settings[$k] ?? $d);
           <input type="checkbox" name="report_urgency_colors" value="1" style="width:auto" <?= ($settings['report_urgency_colors'] ?? '1') !== '0' ? 'checked' : '' ?>>
           <span style="margin:0">Show restock urgency colours on report rows</span>
         </label>
-        <p class="help" style="margin-top:-4px">Pastel red when inventory is 0, orange at or below 50% of Min, yellow at Min. Turn off for a plain table.</p>
+        <p class="help" style="margin-top:-4px">Row colour is a pastel blend from red at 0 stock, through orange at 50% of Min, to yellow at Min. Turn off for a plain table.</p>
         <div class="toolbar" style="margin:4px 0 0">
           <button type="button" class="btn btn-sm" id="shopifyTest"><?= Icons::get('link', 16) ?> Test connection</button>
           <span id="shopifyResult" class="help"></span>

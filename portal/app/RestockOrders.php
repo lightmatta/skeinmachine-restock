@@ -341,23 +341,89 @@ class RestockOrders
         return $v;
     }
 
-    /** Pastel urgency band for a report row: red (0), orange (≤50% of min), yellow (≤ min). */
+    /** Pastel red at 0 inventory. */
+    public const URGENCY_RED = '#f7c4c0';
+    /** Pastel orange at 50% of Min. */
+    public const URGENCY_ORANGE = '#fcd4a8';
+    /** Pastel yellow at Min (and above). */
+    public const URGENCY_YELLOW = '#f6eaa8';
+
+    /**
+     * Continuous pastel shade for inventory as a fraction of Min:
+     * 0 = red, 50% = orange, Min = yellow. Values in between are mixed.
+     * Stock above Min stays yellow. A Min of 0 uses red only when stock is 0.
+     */
+    public static function urgencyColor(int $stock, int $min): string
+    {
+        $red = self::hexToRgb(self::URGENCY_RED);
+        $orange = self::hexToRgb(self::URGENCY_ORANGE);
+        $yellow = self::hexToRgb(self::URGENCY_YELLOW);
+        if ($stock <= 0) {
+            return self::rgbToHex($red);
+        }
+        if ($min <= 0) {
+            return self::rgbToHex($yellow);
+        }
+        $t = min(1.0, $stock / $min);
+        if ($t <= 0.5) {
+            return self::rgbToHex(self::lerpRgb($red, $orange, $t / 0.5));
+        }
+        return self::rgbToHex(self::lerpRgb($orange, $yellow, ($t - 0.5) / 0.5));
+    }
+
+    /** Coarse stop used by tests and the legend: red / orange / yellow. */
     public static function urgencyLevel(int $stock, int $min): string
     {
         if ($stock <= 0) {
             return 'red';
         }
         if ($min <= 0) {
-            return '';
-        }
-        $ratio = $stock / $min;
-        if ($ratio <= 0.5) {
-            return 'orange';
-        }
-        if ($ratio <= 1.0) {
             return 'yellow';
         }
-        return '';
+        $ratio = $stock / $min;
+        if ($ratio < 0.5) {
+            return 'red';
+        }
+        if ($ratio < 1.0) {
+            return 'orange';
+        }
+        return 'yellow';
+    }
+
+    /**
+     * @return array{0:int,1:int,2:int}
+     */
+    private static function hexToRgb(string $hex): array
+    {
+        $hex = ltrim($hex, '#');
+        return [
+            (int)hexdec(substr($hex, 0, 2)),
+            (int)hexdec(substr($hex, 2, 2)),
+            (int)hexdec(substr($hex, 4, 2)),
+        ];
+    }
+
+    /**
+     * @param array{0:int,1:int,2:int} $from
+     * @param array{0:int,1:int,2:int} $to
+     * @return array{0:int,1:int,2:int}
+     */
+    private static function lerpRgb(array $from, array $to, float $t): array
+    {
+        $t = max(0.0, min(1.0, $t));
+        return [
+            (int)round($from[0] + ($to[0] - $from[0]) * $t),
+            (int)round($from[1] + ($to[1] - $from[1]) * $t),
+            (int)round($from[2] + ($to[2] - $from[2]) * $t),
+        ];
+    }
+
+    /**
+     * @param array{0:int,1:int,2:int} $rgb
+     */
+    private static function rgbToHex(array $rgb): string
+    {
+        return sprintf('#%02x%02x%02x', $rgb[0], $rgb[1], $rgb[2]);
     }
 
     public static function urgencyColorsEnabled(): bool

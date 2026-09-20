@@ -124,10 +124,15 @@ expect(str_contains($blankText, 'SKU: unknown'), 'Copy text uses unknown for a m
 expect(str_contains($blankText, 'Product ID: unknown'), 'Copy text uses unknown for a missing product ID');
 $blankPdf = App\RestockOrders::reportPdf($blankGroup);
 expect(str_contains($blankPdf, 'unknown'), 'PDF uses unknown for missing SKU or product ID');
-expect(App\RestockOrders::urgencyLevel(0, 10) === 'red', 'Zero inventory is red urgency');
-expect(App\RestockOrders::urgencyLevel(5, 10) === 'orange', 'Half of min is orange urgency');
-expect(App\RestockOrders::urgencyLevel(10, 10) === 'yellow', 'At min is yellow urgency');
-expect(App\RestockOrders::urgencyLevel(12, 10) === '', 'Above min is not an urgency colour');
+expect(App\RestockOrders::urgencyColor(0, 10) === App\RestockOrders::URGENCY_RED, 'Zero inventory is pastel red');
+expect(App\RestockOrders::urgencyColor(5, 10) === App\RestockOrders::URGENCY_ORANGE, 'Half of min is pastel orange');
+expect(App\RestockOrders::urgencyColor(10, 10) === App\RestockOrders::URGENCY_YELLOW, 'At min is pastel yellow');
+expect(App\RestockOrders::urgencyColor(20, 10) === App\RestockOrders::URGENCY_YELLOW, 'Above min stays pastel yellow');
+$midLow = App\RestockOrders::urgencyColor(2, 10);
+$midHigh = App\RestockOrders::urgencyColor(8, 10);
+expect($midLow !== App\RestockOrders::URGENCY_RED && $midLow !== App\RestockOrders::URGENCY_ORANGE, 'A value between 0 and 50% is a blended shade');
+expect($midHigh !== App\RestockOrders::URGENCY_ORANGE && $midHigh !== App\RestockOrders::URGENCY_YELLOW, 'A value between 50% and Min is a blended shade');
+expect($midLow !== $midHigh, 'Low and high mid-range shades are distinct');
 $attention = App\RestockOrders::attentionReports($reports);
 expect(count($attention) <= 3, 'Overview attention list is at most three vendors');
 expect(count($attention) >= 1, 'Overview attention list includes vendors below min');
@@ -205,12 +210,12 @@ expect(str_contains($homeSrc, '>Total<') || str_contains($homeSrc, 'Inv + Order 
 expect(str_contains($homeSrc, 'col-name'), 'Product name uses a truncating column');
 expect(str_contains($homeSrc, 'td.col-name'), 'Full product name popover is bound to name cells, not the header');
 expect(str_contains($homeSrc, 'copyPreviewModal'), 'Copy as text opens a preview');
-expect(str_contains($homeSrc, 'urgency-'), 'Report rows can take urgency colour classes');
+expect(str_contains($homeSrc, 'has-urgency') || str_contains($homeSrc, '--urg'), 'Report rows take a blended urgency colour');
 expect(!str_contains($homeSrc, 'Desired Goal'), 'Old goal-minus-stock column title is gone');
 
 $cssSrc = file_get_contents($root . '/public/assets/app.css');
 expect(str_contains($cssSrc, 'text-transform: none'), 'Report table headers are not forced uppercase');
-expect(str_contains($cssSrc, 'urgency-red'), 'Report urgency red style exists');
+expect(str_contains($cssSrc, 'urg-scale') && str_contains($cssSrc, 'linear-gradient'), 'Report urgency uses a continuous colour scale');
 expect(str_contains($cssSrc, 'copy-preview-letter'), 'Copy preview is styled as a letter');
 
 $jsSrc = file_get_contents($root . '/public/assets/app.js');

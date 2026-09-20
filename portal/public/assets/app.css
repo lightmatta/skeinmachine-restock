@@ -761,26 +761,27 @@ tr.wo-tray.wo-done td {
 
 .urgency-legend {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  flex-direction: column;
+  gap: 6px;
   margin: 10px 0 0;
   font-size: 12px;
   color: var(--grey);
+  max-width: 380px;
 }
-.urg-swatch {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 10px;
+.urg-scale {
+  display: block;
+  height: 10px;
+  width: 100%;
   border-radius: 999px;
   border: 1px solid var(--line);
+  background: linear-gradient(90deg, #f7c4c0 0%, #fcd4a8 50%, #f6eaa8 100%);
 }
-.urg-swatch.urg-red { background: #fde8e6; }
-.urg-swatch.urg-orange { background: #fdecd8; }
-.urg-swatch.urg-yellow { background: #fbf4d0; }
-.restock-report tbody tr.urgency-red td { background: #fde8e6; }
-.restock-report tbody tr.urgency-orange td { background: #fdecd8; }
-.restock-report tbody tr.urgency-yellow td { background: #fbf4d0; }
+.urg-scale-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.restock-report tbody tr.has-urgency td { background-color: var(--urg); }
 
 .copy-preview-card { width: min(640px, 100%); }
 .copy-preview-letter {
