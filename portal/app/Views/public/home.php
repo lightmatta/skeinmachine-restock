@@ -187,16 +187,27 @@ page_script(<<<'JS'
       if (!card) return;
       var text = reportText(card);
       try {
+        var copied = false;
         if (navigator.clipboard && navigator.clipboard.writeText) {
-          await navigator.clipboard.writeText(text);
-        } else {
+          try {
+            await navigator.clipboard.writeText(text);
+            copied = true;
+          } catch (e1) { copied = false; }
+        }
+        if (!copied) {
           var ta = document.createElement('textarea');
           ta.value = text;
+          ta.setAttribute('readonly', '');
+          ta.style.position = 'fixed';
+          ta.style.top = '0';
+          ta.style.left = '-9999px';
           document.body.appendChild(ta);
+          ta.focus();
           ta.select();
-          document.execCommand('copy');
+          copied = document.execCommand('copy');
           ta.remove();
         }
+        if (!copied) throw new Error('copy failed');
         btn.classList.add('is-copied');
         btn.setAttribute('title', 'Copied');
         if (window.hd && hd.toast) hd.toast('Copied restock request');
