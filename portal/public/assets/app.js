@@ -550,6 +550,7 @@
       this.hidden = new Set(opts.hidden || []);
       this.persistHidden = opts.persistHidden || null;
       this.rowActions = Array.isArray(opts.rowActions) ? opts.rowActions : [];
+      this.groupKey = opts.groupKey || null;
       this.rows = [];
       this.selected = new Set();
       this.expanded = new Set();
@@ -619,6 +620,9 @@
         this.search = e.target.value.toLowerCase();
         this.paint();
       });
+      if (this.mount.querySelector(".grid-search") && this.entity === "vendor_products") {
+        this.mount.querySelector(".grid-search").placeholder = "Filter product names…";
+      }
       const addBtn = this.mount.querySelector(".grid-add");
       if (addBtn) addBtn.addEventListener("click", () => this.addRow());
 
@@ -743,7 +747,21 @@
         return;
       }
       tbody.innerHTML = "";
+      let lastGroup = null;
       rows.forEach((r) => {
+        if (this.groupKey) {
+          const g = r[this.groupKey] || "Ungrouped";
+          if (g !== lastGroup) {
+            lastGroup = g;
+            const gh = document.createElement("tr");
+            gh.className = "grid-group";
+            const gtd = document.createElement("td");
+            gtd.colSpan = cols.length + extra;
+            gtd.textContent = g;
+            gh.appendChild(gtd);
+            tbody.appendChild(gh);
+          }
+        }
         const tr = document.createElement("tr");
         if (this.expanded.has(r.id)) tr.classList.add("is-expanded");
         if (this.selectable) {
@@ -871,6 +889,11 @@
     }
 
     formatCell(col, val, row) {
+      if (col.options && col.key === "vendor_id") {
+        const hit = (col.options || []).find((o) => String(o && typeof o === "object" ? o.value : o) === String(val ?? 0));
+        const label = hit && typeof hit === "object" ? (hit.label ?? hit.value) : (hit || row.vendor_name || "—");
+        return hd.escape(String(label || "—"));
+      }
       if (col.type === "money") return hd.money(val);
       if (col.type === "badge") return `<span class="badge ${hd.escape(String(val))}">${hd.escape(String(val))}</span>`;
       if (col.type === "bool") {
@@ -1008,6 +1031,7 @@
         return data;
       }
       hd.toast(data.message || (title || "Done"));
+      if (op === "scrape") this.reload();
       return data;
     }
   }

@@ -517,6 +517,14 @@ table.grid tr.expand-row td {
   flex-wrap: wrap; margin-bottom: 8px;
 }
 .wo-group-head h2 { margin: 0; }
+.restock-section-title { margin: 16px 0 8px; font-size: 14px; letter-spacing: .04em; text-transform: uppercase; color: var(--grey); }
+.restock-section-title.restock-unavail { color: #9b2c2c; }
+.restock-unavail-wrap { outline: 2px solid rgba(155, 44, 44, .25); border-radius: 10px; }
+.restock-unavail-row { background: #fff4f2; }
+table.grid tr.grid-group td {
+  background: var(--bg-soft); font-weight: 700; letter-spacing: .02em;
+  border-top: 1px solid var(--line);
+}
 .chat-to {
   display: flex; align-items: center; gap: 8px; padding: 8px 10px;
   border-bottom: 1px solid var(--line); flex: none; font-size: 13px;

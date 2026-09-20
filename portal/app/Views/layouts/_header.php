@@ -43,7 +43,7 @@ if ($isWholesale) {
     $accountLinks[] = ['orders', 'orders', 'My orders'];
 } elseif ($isStaff) {
     $accountLinks[] = ['admin', 'grid', 'Dashboard'];
-    $accountLinks[] = ['admin/work-orders', 'clipboard', 'Work orders'];
+    $accountLinks[] = ['admin/work-orders', 'clipboard', 'Restock orders'];
     $accountLinks[] = ['admin/work-orders/schedule', 'clock', 'Schedule'];
 } elseif ($user && !$isAdmin) {
     $accountLinks[] = ['dashboard', 'user', 'My account'];

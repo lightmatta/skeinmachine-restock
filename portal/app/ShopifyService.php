@@ -11,12 +11,9 @@ namespace App;
  * The portal stores the app Client ID + Client secret and the store domain,
  * then uses Shopify's client-credentials grant to obtain and renew the token.
  *
- * Retail Status (products.status) is overwritten from Shopify on a full
- * refresh. Wholesale Status (is_public) and archived are never overwritten, so
- * the products wholesale accounts can see stay under admin control. Products
- * are matched by Shopify product id; new ones are created, existing ones have
- * catalog data (title, description, price, sku, stock, category, image, retail
- * status) refreshed.
+ * Catalog fields (title, description, price, sku, stock, category, image)
+ * refresh from Shopify. Admin-owned restock fields (vendor, min, goal, status)
+ * are never overwritten on existing rows.
  */
 class ShopifyService
 {
@@ -291,8 +288,8 @@ class ShopifyService
 
     /**
      * Upsert normalised products into the catalog by Shopify id.
-     * Retail Status (status) is overwritten from Shopify. Wholesale Status
-     * (is_public) and archived are preserved on existing rows.
+     * Stock, title, SKU, price and images refresh. Vendor, min, goal and
+     * active/inactive status on existing rows stay under admin control.
      * Returns ['created' => n, 'updated' => n].
      */
     public static function upsertProducts(array $items): array
@@ -303,18 +300,15 @@ class ShopifyService
         $find = $pdo->prepare('SELECT id, colours FROM products WHERE shopify_product_id = ? LIMIT 1');
         $update = $pdo->prepare(
             "UPDATE products SET title = ?, description = ?, category = ?, sku = ?,
-                    price_cents = ?, stock = ?, status = ?, image_url = ?, images_json = ?, colours = ?,
+                    price_cents = ?, stock = ?, image_url = ?, images_json = ?,
                     updated_at = datetime('now')
              WHERE id = ?"
         );
-        // New products default to wholesale-visible so the chosen collection shows.
-        // Retail Status comes from Shopify; wholesale visibility is not refreshed later.
         $insert = $pdo->prepare(
             "INSERT INTO products (sku, title, description, category, price_cents, stock, image_url, images_json,
-                                   is_public, status, shopify_product_id, min_qty, spt, warehouse_stock, colours)
-             VALUES (?,?,?,?,?,?,?,?,1,?,?,?,?,0,?)"
+                                   is_public, status, shopify_product_id, min_qty, goal_qty, spt, warehouse_stock, colours)
+             VALUES (?,?,?,?,?,?,?,?,1,?,?,0,0,?,0,?)"
         );
-        $defaultMin = Settings::productMinQty();
         $defaultSpt = Settings::productSpt();
 
         foreach ($items as $it) {
@@ -329,8 +323,8 @@ class ShopifyService
             if ($existing) {
                 $update->execute([
                     $it['title'], $it['description'], $it['category'], $it['sku'],
-                    $it['price_cents'], $it['stock'], $it['status'] ?? 'active',
-                    $it['image_url'], $it['images_json'] ?? '', $colours, (int)$existing['id'],
+                    $it['price_cents'], $it['stock'],
+                    $it['image_url'], $it['images_json'] ?? '', (int)$existing['id'],
                 ]);
                 $updated++;
             } else {
@@ -338,7 +332,7 @@ class ShopifyService
                     $it['sku'], $it['title'], $it['description'], $it['category'],
                     $it['price_cents'], $it['stock'], $it['image_url'], $it['images_json'] ?? '',
                     $it['status'] ?? 'active', $it['shopify_product_id'],
-                    $defaultMin, $defaultSpt, $colours,
+                    $defaultSpt, $colours,
                 ]);
                 $created++;
             }

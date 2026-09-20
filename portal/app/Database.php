@@ -60,7 +60,9 @@ class Database
         self::ensureColumn('products', 'images_json', 'TEXT');
         self::ensureColumn('messages', 'to_user_id', 'INTEGER');
         self::ensureColumn('messages', 'sender_user_id', 'INTEGER');
-        self::ensureColumn('products', 'min_qty', 'INTEGER NOT NULL DEFAULT 10');
+        self::ensureColumn('products', 'min_qty', 'INTEGER NOT NULL DEFAULT 0');
+        self::ensureColumn('products', 'goal_qty', 'INTEGER NOT NULL DEFAULT 0');
+        self::ensureColumn('products', 'vendor_id', 'INTEGER');
         self::ensureColumn('products', 'spt', 'INTEGER NOT NULL DEFAULT 10');
         self::ensureColumn('products', 'warehouse_stock', 'INTEGER NOT NULL DEFAULT 0');
         self::ensureColumn('work_orders', 'notes', 'TEXT');
@@ -108,7 +110,7 @@ class Database
             'wholesale_show_stock' => '0',
             'currency'            => 'AUD',
             'wholesale_percent'   => '65',
-            'product_min_qty'     => '10',
+            'product_min_qty'     => '0',
             'product_spt'         => '10',
             'im_browser_notifications' => '0',
             'admin_event_alerts'  => '0',

@@ -11,6 +11,8 @@ use App\ShopifyCsv;
 use App\UserPrefs;
 use App\View;
 use App\WorkOrders;
+use App\Vendors;
+use App\RestockOrders;
 use App\Nlp\QueryEngine;
 use PDO;
 
@@ -25,7 +27,17 @@ class AdminController
         ],
         'products' => [
             'table' => 'products',
-            'editable' => ['sku', 'title', 'description', 'category', 'price_cents', 'stock', 'min_qty', 'spt', 'warehouse_stock', 'is_public', 'archived', 'colours'],
+            'editable' => ['sku', 'title', 'description', 'category', 'price_cents', 'stock', 'min_qty', 'goal_qty', 'vendor_id', 'status', 'archived'],
+            'archivable' => true,
+        ],
+        'vendors' => [
+            'table' => 'vendors',
+            'editable' => ['vendor_id', 'name', 'stock_urls', 'notes', 'archived'],
+            'archivable' => true,
+        ],
+        'vendor_products' => [
+            'table' => 'vendor_products',
+            'editable' => ['vendor_id', 'vendor_product_id', 'sku', 'title', 'price_cents', 'stock', 'status', 'source_url', 'matched_product_id', 'archived'],
             'archivable' => true,
         ],
         'bundles' => [
@@ -89,6 +101,11 @@ class AdminController
             'clients'   => (int)$pdo->query("SELECT COUNT(*) FROM users WHERE role='wholesale'")->fetchColumn(),
             'revenue'   => (int)$pdo->query("SELECT COALESCE(SUM(total_cents),0) FROM orders WHERE payment_status='paid'")->fetchColumn(),
         ];
+        $restock = RestockOrders::stats();
+        $stats['vendors'] = (int)$pdo->query('SELECT COUNT(*) FROM vendors WHERE archived = 0')->fetchColumn();
+        $stats['below_min'] = $restock['below_min'];
+        $stats['fulfillable'] = $restock['fulfillable'];
+        $stats['unfulfillable'] = $restock['unfulfillable'];
 
         View::render('admin/dashboard', [
             'title' => 'Admin', 'active' => 'dashboard',
@@ -97,6 +114,7 @@ class AdminController
             'readyOrders' => Auth::isSuperuser() ? WorkOrders::readyForApproval() : [],
             'unassignedOrders' => WorkOrders::unassignedProvisioning(),
             'stalledWork' => WorkOrders::stalledItems(),
+            'restockGroups' => RestockOrders::grouped(),
         ]);
     }
 
@@ -113,12 +131,31 @@ class AdminController
 
     public static function orders(): void
     {
-        Auth::requireAdmin();
-        $pdo = Database::pdo();
-        $clients = $pdo->query("SELECT id, email FROM users WHERE role IN ('wholesale','guest','admin') ORDER BY email")->fetchAll();
-        View::render('admin/orders', [
-            'title' => 'Orders', 'active' => 'orders', 'clients' => $clients,
-            'hiddenCols' => UserPrefs::hiddenColumns(Auth::id(), UserPrefs::GRID_ORDERS, ['notes']),
+        self::vendors();
+    }
+
+    public static function vendors(): void
+    {
+        Auth::requireStaffOrAdmin();
+        View::render('admin/vendors', [
+            'title' => 'Vendors', 'active' => 'vendors',
+            'readonly' => Auth::isStaff(),
+            'hiddenCols' => UserPrefs::hiddenColumns(Auth::id(), UserPrefs::GRID_VENDORS, ['notes']),
+        ]);
+    }
+
+    public static function vendorProducts(): void
+    {
+        Auth::requireStaffOrAdmin();
+        View::render('admin/vendor_products', [
+            'title' => 'Vendor products', 'active' => 'vendor-products',
+            'readonly' => Auth::isStaff(),
+            'vendors' => Vendors::all(),
+            'hiddenCols' => UserPrefs::hiddenColumns(
+                Auth::id(),
+                UserPrefs::GRID_VENDOR_PRODUCTS,
+                ['source_url', 'vendor_product_id']
+            ),
         ]);
     }
 
@@ -128,7 +165,7 @@ class AdminController
         View::render('admin/products', [
             'title' => 'Products', 'active' => 'products',
             'readonly' => Auth::isStaff(),
-            'wholesalePercent' => Settings::wholesalePercent(),
+            'vendors' => Vendors::options(),
             'hiddenCols' => UserPrefs::hiddenColumns(
                 Auth::id(),
                 UserPrefs::GRID_PRODUCTS,
@@ -157,36 +194,10 @@ class AdminController
     public static function workOrders(): void
     {
         Auth::requireStaffOrAdmin();
-        $rows = WorkOrders::listGrouped();
-        $groups = [];
-        foreach ($rows as $w) {
-            $oid = (int)$w['order_id'];
-            if (!isset($groups[$oid])) {
-                $groups[$oid] = [
-                    'client_name'  => $w['client_name'],
-                    'client_email' => $w['client_email'],
-                    'items'        => [],
-                    'all_complete' => true,
-                ];
-            }
-            $groups[$oid]['items'][] = $w;
-            $lineDone = WorkOrders::isDone((string)$w['status']);
-            foreach ($w['trays'] ?? [] as $tray) {
-                if (!WorkOrders::isDone((string)$tray['status'])) {
-                    $lineDone = false;
-                }
-            }
-            if (!$lineDone) {
-                $groups[$oid]['all_complete'] = false;
-            }
-        }
-        $staff = Database::pdo()->query(
-            "SELECT id, email, first_name, last_name FROM users WHERE role = 'staff' AND status = 'active' ORDER BY first_name, email"
-        )->fetchAll();
-        View::render('admin/work_orders', [
-            'title' => 'Work orders', 'active' => 'work-orders',
-            'rows' => $rows, 'groups' => $groups, 'staff' => $staff,
-            'isSuper' => Auth::isSuperuser(), 'isAdmin' => Auth::isAdmin(),
+        View::render('admin/restock_orders', [
+            'title' => 'Restock orders', 'active' => 'work-orders',
+            'groups' => RestockOrders::grouped(),
+            'isAdmin' => Auth::isAdmin(),
         ]);
     }
 
@@ -210,16 +221,16 @@ class AdminController
             $to = $tmp;
         }
         View::render('admin/work_orders_schedule', [
-            'title' => 'Work order schedule',
+            'title' => 'Restock schedule',
             'active' => 'work-orders-schedule',
             'from' => $from,
             'to' => $to,
-            'orders' => WorkOrders::provisioningOrders(),
-            'rows' => WorkOrders::listGrouped(),
+            'orders' => RestockOrders::provisioningOrders(),
+            'rows' => RestockOrders::listGrouped(),
             'view' => $view,
             'isAdmin' => Auth::isAdmin(),
-            'staffRates' => WorkOrders::staffRates(),
-            'conflicts' => WorkOrders::scheduleConflicts(),
+            'staffRates' => RestockOrders::staffRates(),
+            'conflicts' => RestockOrders::scheduleConflicts(),
         ]);
     }
 
@@ -232,7 +243,7 @@ class AdminController
     public static function analytics(): void
     {
         Auth::requireAdmin();
-        View::render('admin/analytics', ['title' => 'Analytics', 'active' => 'analytics']);
+        redirect('admin');
     }
 
     public static function settings(): void
@@ -240,9 +251,8 @@ class AdminController
         Auth::requireAdmin();
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!csrf_check()) redirect('admin/settings');
-            $keys = ['company_name', 'front_title', 'highlight_color', 'logo_url', 'contact_email',
-                     'contact_phone', 'opening_hours', 'wholesale_preface', 'fy_start_month',
-                     'page_about', 'page_contact', 'page_products',
+            $keys = ['company_name', 'highlight_color', 'logo_url', 'contact_email',
+                     'contact_phone', 'opening_hours', 'fy_start_month',
                      'shopify_domain', 'shopify_client_id', 'shopify_api_version', 'shopify_collection_id'];
             $prevClientId = (string)Settings::get('shopify_client_id', '');
             $prevDomain = (string)Settings::get('shopify_domain', '');
@@ -262,11 +272,7 @@ class AdminController
             if ($secretUpdated || $newClientId !== $prevClientId || $newDomain !== $prevDomain) {
                 \App\ShopifyService::forgetCachedToken();
             }
-            Settings::set('wholesale_signup_enabled', isset($_POST['wholesale_signup_enabled']) ? '1' : '0');
-            Settings::set('wholesale_show_stock', isset($_POST['wholesale_show_stock']) ? '1' : '0');
-            Settings::set('im_browser_notifications', isset($_POST['im_browser_notifications']) ? '1' : '0');
-            Settings::set('admin_event_alerts', isset($_POST['admin_event_alerts']) ? '1' : '0');
-            Settings::set('detect_colours_on_import', isset($_POST['detect_colours_on_import']) ? '1' : '0');
+            // Wholesale, notifications, front-page HTML, and colour-detect are retired.
             $prevPeriodic = Settings::get('shopify_periodic_sync', '0');
             $prevMins = Settings::get('shopify_periodic_minutes', '60');
             Settings::set('shopify_periodic_sync', isset($_POST['shopify_periodic_sync']) ? '1' : '0');
@@ -278,18 +284,6 @@ class AdminController
             $newMins = Settings::get('shopify_periodic_minutes', '60');
             if ($newPeriodic !== $prevPeriodic || $newMins !== $prevMins) {
                 \App\ShopifyService::schedulePeriodicFromNow();
-            }
-            if (array_key_exists('wholesale_percent', $_POST)) {
-                $pct = (int)$_POST['wholesale_percent'];
-                Settings::set('wholesale_percent', (string)max(0, min(100, $pct)));
-            }
-            if (array_key_exists('product_min_qty', $_POST)) {
-                $min = (int)$_POST['product_min_qty'];
-                Settings::set('product_min_qty', (string)max(1, $min ?: 10));
-            }
-            if (array_key_exists('product_spt', $_POST)) {
-                $spt = (int)$_POST['product_spt'];
-                Settings::set('product_spt', (string)max(1, $spt ?: 10));
             }
             if (array_key_exists('currency', $_POST)) {
                 Settings::set('currency', \App\Currency::normalize((string)$_POST['currency']));
@@ -347,11 +341,22 @@ class AdminController
         $entity = (string)($body['entity'] ?? '');
         $op = (string)($body['op'] ?? '');
 
-        if ($entity === 'work_orders') { self::workOrdersApi($op, $body); }
+        if ($entity === 'work_orders' || $entity === 'restock') { self::workOrdersApi($op, $body); }
         if ($entity === 'prefs') { self::prefsApi($op, $body); }
+        if ($entity === 'vendors' && $op === 'scrape') {
+            if (Auth::isStaff()) {
+                json_response(['error' => 'forbidden'], 403);
+            }
+            json_response(Vendors::scrape((int)($body['id'] ?? 0)));
+        }
 
         if (Auth::isStaff()) {
-            $allowed = ['products' => ['list'], 'bundles' => ['list']];
+            $allowed = [
+                'products' => ['list'],
+                'bundles' => ['list'],
+                'vendors' => ['list'],
+                'vendor_products' => ['list'],
+            ];
             if (!isset($allowed[$entity]) || !in_array($op, $allowed[$entity], true)) {
                 json_response(['error' => 'forbidden', 'message' => 'Staff accounts have read-only catalog access.'], 403);
             }
@@ -421,8 +426,26 @@ class AdminController
                     }
                     $changes['email'] = $email;
                 }
+                if ($entity === 'vendors') {
+                    Vendors::update($id, $changes);
+                    json_response(['ok' => true]);
+                }
+                if ($entity === 'vendor_products') {
+                    Vendors::updateProduct($id, $changes);
+                    json_response(['ok' => true]);
+                }
                 if ($entity === 'products' && array_key_exists('min_qty', $changes)) {
-                    $changes['min_qty'] = max(1, (int)$changes['min_qty']);
+                    $changes['min_qty'] = max(0, (int)$changes['min_qty']);
+                }
+                if ($entity === 'products' && array_key_exists('goal_qty', $changes)) {
+                    $changes['goal_qty'] = max(0, (int)$changes['goal_qty']);
+                }
+                if ($entity === 'products' && array_key_exists('vendor_id', $changes)) {
+                    $vid = (int)$changes['vendor_id'];
+                    $changes['vendor_id'] = $vid > 0 ? $vid : null;
+                }
+                if ($entity === 'products' && array_key_exists('status', $changes)) {
+                    $changes['status'] = (string)$changes['status'] === 'inactive' ? 'inactive' : 'active';
                 }
                 if ($entity === 'products' && array_key_exists('spt', $changes)) {
                     $changes['spt'] = max(1, (int)$changes['spt']);
@@ -525,22 +548,27 @@ class AdminController
                 break;
 
             case 'bulk_update':
+                $ids = array_values(array_unique(array_filter(array_map('intval', (array)($body['ids'] ?? [])), fn($n) => $n > 0)));
+                $changes = (array)($body['changes'] ?? []);
+                if ($entity === 'vendor_products' && array_key_exists('status', $changes)) {
+                    $n = Vendors::bulkProductStatus($ids, (string)$changes['status']);
+                    json_response(['ok' => true, 'updated' => $n]);
+                }
                 if ($entity !== 'products') {
                     json_response(['error' => 'unknown_op'], 400);
                 }
-                $ids = array_values(array_unique(array_filter(array_map('intval', (array)($body['ids'] ?? [])), fn($n) => $n > 0)));
-                $changes = (array)($body['changes'] ?? []);
                 $sets = [];
                 $vals = [];
-                foreach (['is_public', 'spt', 'warehouse_stock'] as $col) {
+                foreach (['status', 'vendor_id', 'min_qty', 'goal_qty'] as $col) {
                     if (!array_key_exists($col, $changes)) continue;
-                    if ($col === 'is_public') {
-                        $changes[$col] = (int)$changes[$col] ? 1 : 0;
+                    if ($col === 'status') {
+                        $changes[$col] = (string)$changes[$col] === 'inactive' ? 'inactive' : 'active';
                     }
-                    if ($col === 'spt') {
-                        $changes[$col] = max(1, (int)$changes[$col]);
+                    if ($col === 'vendor_id') {
+                        $vid = (int)$changes[$col];
+                        $changes[$col] = $vid > 0 ? $vid : null;
                     }
-                    if ($col === 'warehouse_stock') {
+                    if ($col === 'min_qty' || $col === 'goal_qty') {
                         $changes[$col] = max(0, (int)$changes[$col]);
                     }
                     $sets[] = "$col = ?";
@@ -578,6 +606,12 @@ class AdminController
                 }
                 if ($entity === 'products') {
                     $pdo->prepare('UPDATE order_items SET product_id = NULL WHERE product_id = ?')->execute([$id]);
+                    $pdo->prepare('UPDATE vendor_products SET matched_product_id = NULL WHERE matched_product_id = ?')->execute([$id]);
+                    $pdo->prepare('DELETE FROM restock_schedules WHERE product_id = ?')->execute([$id]);
+                }
+                if ($entity === 'vendors') {
+                    Vendors::delete($id);
+                    json_response(['ok' => true]);
                 }
                 $pdo->prepare("DELETE FROM {$schema['table']} WHERE id = ?")->execute([$id]);
                 json_response(['ok' => true]);
@@ -594,6 +628,8 @@ class AdminController
                 try {
                     $count = (int)$pdo->query('SELECT COUNT(*) FROM products')->fetchColumn();
                     $pdo->exec('UPDATE order_items SET product_id = NULL');
+                    $pdo->exec('UPDATE vendor_products SET matched_product_id = NULL');
+                    $pdo->exec('DELETE FROM restock_schedules');
                     $pdo->exec('DELETE FROM bundle_items');
                     $pdo->exec('DELETE FROM products');
                     $pdo->prepare('INSERT INTO activity (user_id, type, description) VALUES (?,?,?)')
@@ -643,14 +679,26 @@ class AdminController
             return $stmt->fetchAll();
         }
         if ($entity === 'products') {
-            $rows = $pdo->query('SELECT id, sku, title, description, category, price_cents, stock, min_qty, spt, warehouse_stock, is_public, status, shopify_product_id, archived, colours FROM products ORDER BY title')->fetchAll();
+            $rows = $pdo->query(
+                'SELECT p.id, p.sku, p.title, p.description, p.category, p.price_cents, p.stock, p.min_qty, p.goal_qty,
+                        p.vendor_id, v.name AS vendor_name, p.status, p.shopify_product_id, p.archived
+                 FROM products p
+                 LEFT JOIN vendors v ON v.id = p.vendor_id
+                 ORDER BY p.title COLLATE NOCASE'
+            )->fetchAll();
+            return $rows;
+        }
+        if ($entity === 'vendors') {
+            $rows = Vendors::all(!empty($filters['include_archived']));
             foreach ($rows as &$r) {
-                $r['wholesale_cents'] = Settings::wholesaleCents((int)$r['price_cents']);
-                $r['colours'] = Catalog::coloursCsv((string)($r['colours'] ?? ''));
-                $r['variegated'] = Catalog::productHasColour($r, 'variegated') ? 1 : 0;
+                $urls = Vendors::urlsFrom((string)$r['stock_urls']);
+                $r['url_count'] = count($urls);
             }
             unset($r);
             return $rows;
+        }
+        if ($entity === 'vendor_products') {
+            return Vendors::products($filters);
         }
         if ($entity === 'bundles') {
             return $pdo->query('SELECT id, title, description, is_public, archived FROM bundles ORDER BY title')->fetchAll();
@@ -670,10 +718,12 @@ class AdminController
     {
         $pdo = Database::pdo();
         if ($entity === 'products') {
-            $min = Settings::productMinQty();
-            $spt = Settings::productSpt();
-            $pdo->prepare("INSERT INTO products (title, price_cents, stock, is_public, min_qty, spt, warehouse_stock) VALUES ('New product', 0, 0, 0, ?, ?, 0)")
-                ->execute([$min, $spt]);
+            $pdo->prepare("INSERT INTO products (title, price_cents, stock, is_public, min_qty, goal_qty, status) VALUES ('New product', 0, 0, 0, 0, 0, 'active')")
+                ->execute();
+        } elseif ($entity === 'vendors') {
+            return Vendors::create();
+        } elseif ($entity === 'vendor_products') {
+            return Vendors::createProduct();
         } elseif ($entity === 'bundles') {
             $pdo->exec("INSERT INTO bundles (title, is_public) VALUES ('New bundle', 0)");
         } elseif ($entity === 'users') {
@@ -948,51 +998,20 @@ class AdminController
     private static function workOrdersApi(string $op, array $body): void
     {
         if ($op === 'list') {
-            json_response(['rows' => WorkOrders::listAll(), 'grouped' => WorkOrders::listGrouped(), 'orders' => WorkOrders::provisioningOrders()]);
+            json_response(['rows' => RestockOrders::listGrouped(), 'grouped' => RestockOrders::listGrouped(), 'orders' => RestockOrders::provisioningOrders()]);
         }
         if ($op === 'update') {
             $id = (int)($body['id'] ?? 0);
             $changes = (array)($body['changes'] ?? []);
-            if (array_key_exists('status', $changes)) {
-                $status = (string)$changes['status'];
-                if (!in_array($status, WorkOrders::STATUSES, true)) {
-                    json_response(['error' => 'bad_status'], 400);
-                }
-                $note = array_key_exists('notes', $changes) ? (string)$changes['notes'] : null;
-                if ($status === 'stalled' && trim((string)$note) === '') {
-                    $cur = Database::pdo()->prepare('SELECT notes FROM work_orders WHERE id = ?');
-                    $cur->execute([$id]);
-                    $existingNote = trim((string)$cur->fetchColumn());
-                    if ($existingNote === '') {
-                        json_response(['error' => 'note_required', 'message' => 'Add a note explaining why this work is stalled.'], 400);
-                    }
-                    $note = $existingNote;
-                }
-                WorkOrders::setItemStatus($id, $status, $note);
-            } elseif (array_key_exists('notes', $changes)) {
-                WorkOrders::setItemNote($id, (string)$changes['notes']);
-            }
-            if (array_key_exists('qty', $changes)) {
-                if (!WorkOrders::setItemQty($id, (int)$changes['qty'])) {
-                    json_response(['error' => 'bad_qty', 'message' => 'Only tray sub-tasks can change quantity.'], 400);
-                }
-            }
             if (array_key_exists('starts_at', $changes) || array_key_exists('ends_at', $changes)) {
-                $cur = Database::pdo()->prepare('SELECT starts_at, ends_at FROM work_orders WHERE id = ?');
+                $cur = Database::pdo()->prepare('SELECT starts_at, ends_at FROM restock_schedules WHERE id = ?');
                 $cur->execute([$id]);
                 $row = $cur->fetch() ?: ['starts_at' => date('Y-m-d'), 'ends_at' => date('Y-m-d')];
                 $start = array_key_exists('starts_at', $changes) ? (string)$changes['starts_at'] : (string)($row['starts_at'] ?: date('Y-m-d'));
                 $end = array_key_exists('ends_at', $changes) ? (string)$changes['ends_at'] : (string)($row['ends_at'] ?: $start);
-                if (!WorkOrders::setSchedule($id, $start, $end)) {
+                if (!RestockOrders::setSchedule($id, $start, $end)) {
                     json_response(['error' => 'bad_dates', 'message' => 'Use YYYY-MM-DD dates for the schedule.'], 400);
                 }
-            }
-            if (array_key_exists('staff_user_id', $changes)) {
-                if (!Auth::isAdmin()) {
-                    json_response(['error' => 'forbidden', 'message' => 'Only administrators assign staff.'], 403);
-                }
-                $sid = (int)$changes['staff_user_id'];
-                WorkOrders::assignStaff($id, $sid > 0 ? $sid : null);
             }
             json_response(['ok' => true]);
         }
@@ -1001,36 +1020,22 @@ class AdminController
             if (!is_array($items) || !$items) {
                 json_response(['error' => 'bad_items', 'message' => 'Nothing to schedule.'], 400);
             }
-            $n = WorkOrders::setScheduleBatch($items);
+            $n = RestockOrders::setScheduleBatch($items);
             if ($n < 1) {
                 json_response(['error' => 'bad_dates', 'message' => 'Use YYYY-MM-DD dates for the schedule.'], 400);
             }
-            json_response(['ok' => true, 'updated' => $n, 'conflicts' => WorkOrders::scheduleConflicts()]);
+            json_response(['ok' => true, 'updated' => $n, 'conflicts' => []]);
         }
         if ($op === 'auto_schedule') {
             if (!Auth::isAdmin()) {
-                json_response(['error' => 'forbidden', 'message' => 'Only administrators auto-schedule work.'], 403);
+                json_response(['error' => 'forbidden', 'message' => 'Only administrators schedule restock orders.'], 403);
             }
-            $mode = (string)($body['mode'] ?? 'orders');
             $orderIds = array_map('intval', (array)($body['order_ids'] ?? []));
             $unitIds = array_map('intval', (array)($body['unit_ids'] ?? []));
-            if ($mode === 'conflicts') {
-                if (!$unitIds) {
-                    foreach (WorkOrders::scheduleConflicts() as $c) {
-                        foreach ($c['ids'] as $id) {
-                            $unitIds[] = (int)$id;
-                        }
-                    }
-                }
-                if (!$unitIds) {
-                    json_response(['error' => 'no_conflicts', 'message' => 'There are no tray-rate conflicts to resolve.'], 400);
-                }
-                json_response(WorkOrders::autoSchedule([], $unitIds));
+            if (!$orderIds && !$unitIds) {
+                json_response(['error' => 'bad_orders', 'message' => 'Select one or more vendors to auto-schedule.'], 400);
             }
-            if (!$orderIds) {
-                json_response(['error' => 'bad_orders', 'message' => 'Select one or more orders to auto-schedule.'], 400);
-            }
-            json_response(WorkOrders::autoSchedule($orderIds, []));
+            json_response(RestockOrders::autoSchedule($orderIds, $unitIds));
         }
         if ($op === 'restore_schedule') {
             if (!Auth::isAdmin()) {
@@ -1040,27 +1045,8 @@ class AdminController
             if (!is_array($items) || !$items) {
                 json_response(['error' => 'bad_items', 'message' => 'Nothing to restore.'], 400);
             }
-            $n = WorkOrders::restoreDates($items);
-            json_response(['ok' => true, 'updated' => $n, 'conflicts' => WorkOrders::scheduleConflicts()]);
-        }
-        if ($op === 'assign_order') {
-            if (!Auth::isAdmin()) {
-                json_response(['error' => 'forbidden'], 403);
-            }
-            $oid = (int)($body['id'] ?? 0);
-            $sid = (int)($body['staff_user_id'] ?? 0);
-            WorkOrders::assignStaffToOrder($oid, $sid > 0 ? $sid : null);
-            json_response(['ok' => true]);
-        }
-        if ($op === 'approve') {
-            if (!Auth::isSuperuser()) {
-                json_response(['error' => 'forbidden', 'message' => 'Only the Super Admin can approve a completed order.'], 403);
-            }
-            $ok = WorkOrders::approveOrder((int)($body['id'] ?? 0));
-            if (!$ok) {
-                json_response(['error' => 'not_ready', 'message' => 'Every work-order item must be complete, and the order must still be provisioning.'], 400);
-            }
-            json_response(['ok' => true]);
+            $n = RestockOrders::restoreDates($items);
+            json_response(['ok' => true, 'updated' => $n, 'conflicts' => []]);
         }
         json_response(['error' => 'unknown_op'], 400);
     }

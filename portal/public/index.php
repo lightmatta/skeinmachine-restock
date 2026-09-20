@@ -63,12 +63,16 @@ try {
         // ---- Admin -----------------------------------------------------
         case 'admin':           AdminController::dashboard(); break;
         case 'admin/users':     AdminController::users(); break;
-        case 'admin/orders':    AdminController::orders(); break;
+        case 'admin/orders':
+        case 'admin/vendors':   AdminController::vendors(); break;
+        case 'admin/vendor-products': AdminController::vendorProducts(); break;
         case 'admin/products':  AdminController::products(); break;
         case 'admin/bundles':   AdminController::bundles(); break;
         case 'admin/messages':  AdminController::messages(); break;
-        case 'admin/work-orders': AdminController::workOrders(); break;
-        case 'admin/work-orders/schedule': AdminController::workOrdersSchedule(); break;
+        case 'admin/work-orders':
+        case 'admin/restock-orders': AdminController::workOrders(); break;
+        case 'admin/work-orders/schedule':
+        case 'admin/restock-orders/schedule': AdminController::workOrdersSchedule(); break;
         case 'admin/analytics': AdminController::analytics(); break;
         case 'admin/settings':  AdminController::settings(); break;
         case 'admin/shopify-csv': AdminController::shopifyCsv(); break;

@@ -45,11 +45,24 @@ use App\Icons;
     <?php endif; ?>
 
     <div class="kpi-row">
-      <div class="card stat"><span class="label">Total orders</span><span class="value"><?= (int)$stats['orders'] ?></span></div>
-      <div class="card stat accent"><span class="label">Payment pending</span><span class="value"><?= (int)$stats['pending_pay'] ?></span></div>
-      <div class="card stat"><span class="label">Wholesale clients</span><span class="value"><?= (int)$stats['clients'] ?></span></div>
-      <div class="card stat"><span class="label">Paid revenue (<?= e(\App\Currency::company()) ?>)</span><span class="value"><?= money((int)$stats['revenue']) ?></span></div>
+      <div class="card stat"><span class="label">Vendors</span><span class="value"><?= (int)($stats['vendors'] ?? 0) ?></span></div>
+      <div class="card stat accent"><span class="label">Below restock min</span><span class="value"><?= (int)($stats['below_min'] ?? 0) ?></span></div>
+      <div class="card stat"><span class="label">Can order now</span><span class="value"><?= (int)($stats['fulfillable'] ?? 0) ?></span></div>
+      <div class="card stat"><span class="label">Vendor stock 0</span><span class="value"><?= (int)($stats['unfulfillable'] ?? 0) ?></span></div>
     </div>
+
+    <?php if (!empty($restockGroups)): ?>
+    <div class="card" style="margin-bottom:20px">
+      <h2><?= Icons::get('clipboard', 18) ?> Restock needed</h2>
+      <p class="muted">Catalog items at or below Min, grouped by vendor. Open Restock Orders for the full breakdown.</p>
+      <ul class="help" style="margin:8px 0 0">
+        <?php foreach ($restockGroups as $rg): ?>
+          <li><?= e((string)$rg['vendor_name']) ?> · <?= count($rg['fulfillable']) ?> available · <?= count($rg['unfulfillable']) ?> unfulfillable</li>
+        <?php endforeach; ?>
+      </ul>
+      <p style="margin:12px 0 0"><a class="btn btn-sm btn-primary" href="<?= e(url('admin/work-orders')) ?>">Open restock orders</a></p>
+    </div>
+    <?php endif; ?>
 
     <?php if ($pendingApps): ?>
     <h2><?= Icons::get('users', 18) ?> Pending wholesale applications <span class="badge hl"><?= count($pendingApps) ?></span></h2>
